@@ -1,4 +1,4 @@
- HEAD
+
 # ComputerGraphics
 
 # Computer Graphics 2026 - Course Portfolio
