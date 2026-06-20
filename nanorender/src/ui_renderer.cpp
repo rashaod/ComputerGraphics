@@ -127,9 +127,16 @@ void UIRenderer::draw_rect(mu_Rect rect, mu_Color color) {
     int x2 = std::min({rect.x + rect.w, m_clip_rect.x + m_clip_rect.w, m_width});
     int y2 = std::min({rect.y + rect.h, m_clip_rect.y + m_clip_rect.h, m_height});
 
+    int shift_x = 100;  // visual offset in pixels
+    int shift_y = 80;
+
     for (int y = y1; y < y2; y++) {
         for (int x = x1; x < x2; x++) {
-            m_buffer[y * m_width + x] = c;
+            int dx = x + shift_x;
+            int dy = y + shift_y;
+            if (dx >= 0 && dx < m_width && dy >= 0 && dy < m_height) {
+                m_buffer[dy * m_width + dx] = c;
+            }
         }
     }
 }
