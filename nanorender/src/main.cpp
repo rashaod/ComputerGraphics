@@ -2,14 +2,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "MiniFB.h"
 #include <math.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#ifdef _WIN32
-#include <windows.h>
-#endif
+
 
 extern "C" {
 #include "microui.h"
@@ -21,11 +15,10 @@ extern "C" {
 #define HEIGHT 700
 
 static uint32_t g_buffer[WIDTH * HEIGHT];
+static float g_color_phase = 0.0f;
 
 int main() {
-#ifdef _WIN32
-  SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-#endif
+
   struct mfb_window *window =
       mfb_open_ex("MiniGUI Platform", WIDTH, HEIGHT, MFB_WF_RESIZABLE);
   if (!window)
@@ -43,8 +36,12 @@ int main() {
   UIRenderer renderer(WIDTH, HEIGHT);
 
   // Set up char input callback for textbox input
-  mfb_set_char_input_callback(
+mfb_set_char_input_callback(
       [](struct mfb_window *w, unsigned int c) {
+        if (c == 'c') {
+          g_color_phase += 2.0f;  // shift colors on each press
+          return; // consume the event, don't pass to UI
+        }
         extern void ui_bridge_char_input(struct mfb_window *, unsigned int);
         ui_bridge_char_input(w, c);
       },
@@ -59,8 +56,8 @@ for (int i = 0; i < WIDTH * HEIGHT; i++) {
       // Diagonal wave interference pattern
       int x = i % WIDTH;
       int y = i / WIDTH;
-      uint8_t r = (uint8_t)(128 + 127 * sinf((x + y) * 0.02f));
-      uint8_t g = (uint8_t)(128 + 127 * sinf((x - y) * 0.02f));
+      uint8_t r = (uint8_t)(128 + 127 * sinf((x + y) * 0.02f + g_color_phase));
+      uint8_t g = (uint8_t)(128 + 127 * sinf((x - y) * 0.02f + g_color_phase));
       uint8_t b = 100;
       g_buffer[i] = MFB_RGB(r, g, b);
     }
