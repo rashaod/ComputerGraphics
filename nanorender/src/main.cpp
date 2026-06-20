@@ -16,6 +16,8 @@ extern "C" {
 
 static uint32_t g_buffer[WIDTH * HEIGHT];
 static float g_color_phase = 0.0f;
+static float wave_freq = 0.02f;
+static int waves_enabled = 1;
 
 int main() {
 
@@ -51,14 +53,18 @@ mfb_set_char_input_callback(
     // 1. Input
     ui_bridge_input(ctx, window);
 
-    // 2. Scene Rendering (Background)
-for (int i = 0; i < WIDTH * HEIGHT; i++) {
-      // Diagonal wave interference pattern
+// 2. Scene Rendering (Background)
+    for (int i = 0; i < WIDTH * HEIGHT; i++) {
       int x = i % WIDTH;
       int y = i / WIDTH;
-      uint8_t r = (uint8_t)(128 + 127 * sinf((x + y) * 0.02f + g_color_phase));
-      uint8_t g = (uint8_t)(128 + 127 * sinf((x - y) * 0.02f + g_color_phase));
-      uint8_t b = 100;
+      uint8_t r, g, b;
+      if (waves_enabled) {
+        r = (uint8_t)(128 + 127 * sinf((x + y) * wave_freq + g_color_phase));
+        g = (uint8_t)(128 + 127 * sinf((x - y) * wave_freq + g_color_phase));
+        b = 100;
+      } else {
+        r = g = b = 40; // flat dark gray when disabled
+      }
       g_buffer[i] = MFB_RGB(r, g, b);
     }
     // 3. UI Logic
@@ -100,6 +106,13 @@ for (int i = 0; i < WIDTH * HEIGHT; i++) {
       } else {
        mu_label(ctx, "Check the box above...");
       }
+      // wave pattern controls (Part 5)
+      mu_layout_row(ctx, 1, w1, 0);
+      mu_label(ctx, "Wave frequency:");
+      mu_slider(ctx, &wave_freq, 0.001f, 0.1f);
+
+      mu_layout_row(ctx, 1, w1, 0);
+      mu_checkbox(ctx, "Enable wave pattern", &waves_enabled);
       // textbox
       mu_layout_row(ctx, 1, w1, 0);
       mu_label(ctx, "mu_textbox:");
