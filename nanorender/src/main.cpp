@@ -2,6 +2,14 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "MiniFB.h"
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 extern "C" {
 #include "microui.h"
@@ -15,6 +23,9 @@ extern "C" {
 static uint32_t g_buffer[WIDTH * HEIGHT];
 
 int main() {
+#ifdef _WIN32
+  SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+#endif
   struct mfb_window *window =
       mfb_open_ex("MiniGUI Platform", WIDTH, HEIGHT, MFB_WF_RESIZABLE);
   if (!window)
@@ -44,16 +55,15 @@ int main() {
     ui_bridge_input(ctx, window);
 
     // 2. Scene Rendering (Background)
-    for (int i = 0; i < WIDTH * HEIGHT; i++) {
-      // Simple gradient background
+for (int i = 0; i < WIDTH * HEIGHT; i++) {
+      // Diagonal wave interference pattern
       int x = i % WIDTH;
       int y = i / WIDTH;
-      uint8_t r = (uint8_t)((float)x / WIDTH * 128) + 32;
-      uint8_t g = (uint8_t)((float)y / HEIGHT * 128) + 32;
-      uint8_t b = 64;
+      uint8_t r = (uint8_t)(128 + 127 * sinf((x + y) * 0.02f));
+      uint8_t g = (uint8_t)(128 + 127 * sinf((x - y) * 0.02f));
+      uint8_t b = 100;
       g_buffer[i] = MFB_RGB(r, g, b);
     }
-
     // 3. UI Logic
     static float slider_val = 50.0f;
     static float number_val = 3.14f;
