@@ -17,8 +17,8 @@ extern "C" {
 #include "ui_bridge.h"
 #include "ui_renderer.h"
 
-#define WIDTH 1600
-#define HEIGHT 1200
+#define WIDTH 1000
+#define HEIGHT 700
 
 static uint32_t g_buffer[WIDTH * HEIGHT];
 
@@ -71,6 +71,7 @@ for (int i = 0; i < WIDTH * HEIGHT; i++) {
     static int checkbox_b = 1;
     static char textbox_buf[128] = "edit me";
     static bool quit_requested = false;
+    static int show_secret = 0;
 
     mu_begin(ctx);
 
@@ -95,6 +96,13 @@ for (int i = 0; i < WIDTH * HEIGHT; i++) {
       mu_checkbox(ctx, "mu_checkbox A (off)", &checkbox_a);
       mu_checkbox(ctx, "mu_checkbox B (on)", &checkbox_b);
 
+      mu_layout_row(ctx, 1, w1, 0);
+      mu_checkbox(ctx, "Toggle secret message", &show_secret);
+      if (show_secret) {
+        mu_label(ctx, "You found the secret message!");
+      } else {
+       mu_label(ctx, "Check the box above...");
+      }
       // textbox
       mu_layout_row(ctx, 1, w1, 0);
       mu_label(ctx, "mu_textbox:");
