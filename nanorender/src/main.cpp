@@ -5,6 +5,10 @@
 #include <math.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <vector>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 
 extern "C" {
@@ -47,6 +51,42 @@ void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
   }
 }
 
+struct Vertex { float x, y, z; };
+struct Face { int v0, v1, v2; };
+
+std::vector<Vertex> g_mesh_vertices;
+std::vector<Face> g_mesh_faces;
+
+bool load_obj(const std::string& path) {
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    printf("Failed to open OBJ file: %s\n", path.c_str());
+    return false;
+  }
+
+  g_mesh_vertices.clear();
+  g_mesh_faces.clear();
+
+  std::string line;
+  while (std::getline(file, line)) {
+    std::istringstream ss(line);
+    std::string prefix;
+    ss >> prefix;
+
+    if (prefix == "v") {
+      Vertex v;
+      ss >> v.x >> v.y >> v.z;
+      g_mesh_vertices.push_back(v);
+    } else if (prefix == "f") {
+      int i0, i1, i2;
+      ss >> i0 >> i1 >> i2;
+      g_mesh_faces.push_back({i0 - 1, i1 - 1, i2 - 1});
+    }
+  }
+
+  printf("Loaded OBJ: %zu vertices, %zu faces\n", g_mesh_vertices.size(), g_mesh_faces.size());
+  return true;
+}
 int main() {
  // GLM test (Part 0) - confirm library works
   glm::vec3 test_vec(1.0f, 2.0f, 3.0f);
@@ -61,6 +101,8 @@ int main() {
 
   mu_Context *ctx = (mu_Context *)malloc(sizeof(mu_Context));
   mu_init(ctx);
+
+  load_obj("assets/pyramid.obj");
 
   // Set font callbacks for microui
   ctx->text_width = [](mu_Font font, const char *str, int len) {
@@ -155,6 +197,10 @@ mfb_set_char_input_callback(
       mu_text(ctx, "mu_text: word-wrapped longer text that will reflow inside "
                    "the window width automatically.");
 
+                   mu_layout_row(ctx, 1, w1, 0);
+      char mesh_info[64];
+      snprintf(mesh_info, sizeof(mesh_info), "Mesh: %zu vertices, %zu faces", g_mesh_vertices.size(), g_mesh_faces.size());
+      mu_label(ctx, mesh_info);
       // button
       mu_layout_row(ctx, 1, w1, 0);
       if (mu_button(ctx, "mu_button: click me")) {
