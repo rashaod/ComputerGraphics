@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 
 extern "C" {
@@ -46,6 +48,11 @@ void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
 }
 
 int main() {
+ // GLM test (Part 0) - confirm library works
+  glm::vec3 test_vec(1.0f, 2.0f, 3.0f);
+  glm::mat4 test_mat = glm::translate(glm::mat4(1.0f), glm::vec3(5.0f, 0.0f, 0.0f));
+  glm::vec4 result = test_mat * glm::vec4(test_vec, 1.0f);
+  printf("GLM test: translated vec3(1,2,3) by (5,0,0) -> (%.1f, %.1f, %.1f)\n", result.x, result.y, result.z);
 
   struct mfb_window *window =
       mfb_open_ex("MiniGUI Platform", WIDTH, HEIGHT, MFB_WF_RESIZABLE);
