@@ -18,6 +18,32 @@ static uint32_t g_buffer[WIDTH * HEIGHT];
 static float g_color_phase = 0.0f;
 static float wave_freq = 0.02f;
 static int waves_enabled = 1;
+struct Line { int x0, y0, x1, y1; uint32_t color; };
+static Line g_lines[1000];
+static int g_line_count = 0;
+
+static bool g_is_dragging = false;
+static int g_drag_start_x = 0, g_drag_start_y = 0;
+
+static float draw_r = 255.0f, draw_g = 255.0f, draw_b = 255.0f;
+void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
+  int dx = abs(x1 - x0);
+  int dy = -abs(y1 - y0);
+  int sx = (x0 < x1) ? 1 : -1;
+  int sy = (y0 < y1) ? 1 : -1;
+  int err = dx + dy;
+
+  int x = x0, y = y0;
+  while (true) {
+    if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+      g_buffer[y * WIDTH + x] = color;
+    }
+    if (x == x1 && y == y1) break;
+    int e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x += sx; }
+    if (e2 <= dx) { err += dx; y += sy; }
+  }
+}
 
 int main() {
 
@@ -52,6 +78,23 @@ mfb_set_char_input_callback(
   while (mfb_update_events(window) != MFB_STATE_EXIT) {
     // 1. Input
     ui_bridge_input(ctx, window);
+        // Line drawing input (Part 6)
+    if (mfb_get_mouse_button_buffer(window)[MFB_MOUSE_LEFT] && !g_is_dragging && ctx->hover == 0) {
+      g_is_dragging = true;
+      g_drag_start_x = (int)ctx->mouse_pos.x;
+      g_drag_start_y = (int)ctx->mouse_pos.y;
+    }
+    if (!mfb_get_mouse_button_buffer(window)[MFB_MOUSE_LEFT] && g_is_dragging) {
+      g_is_dragging = false;
+      if (g_line_count < 1000) {
+        g_lines[g_line_count].x0 = g_drag_start_x;
+        g_lines[g_line_count].y0 = g_drag_start_y;
+        g_lines[g_line_count].x1 = (int)ctx->mouse_pos.x;
+        g_lines[g_line_count].y1 = (int)ctx->mouse_pos.y;
+       g_lines[g_line_count].color = MFB_RGB((uint8_t)draw_r, (uint8_t)draw_g, (uint8_t)draw_b);
+        g_line_count++;
+      }
+    }
 
 // 2. Scene Rendering (Background)
     for (int i = 0; i < WIDTH * HEIGHT; i++) {
@@ -67,6 +110,17 @@ mfb_set_char_input_callback(
       }
       g_buffer[i] = MFB_RGB(r, g, b);
     }
+
+    // Draw all permanent lines (Part 6)
+    for (int li = 0; li < g_line_count; li++) {
+      draw_line(g_lines[li].x0, g_lines[li].y0, g_lines[li].x1, g_lines[li].y1, g_lines[li].color);
+    }
+
+ // Draw live preview line while dragging
+    if (g_is_dragging) {
+      draw_line(g_drag_start_x, g_drag_start_y, (int)ctx->mouse_pos.x, (int)ctx->mouse_pos.y, MFB_RGB((uint8_t)draw_r, (uint8_t)draw_g, (uint8_t)draw_b));
+    }
+    
     // 3. UI Logic
     static float slider_val = 50.0f;
     static float number_val = 3.14f;
@@ -84,6 +138,12 @@ mfb_set_char_input_callback(
 
       // label / text
       mu_layout_row(ctx, 1, w1, 0);
+      mu_label(ctx, "Line color (R):");
+      mu_slider(ctx, &draw_r, 0, 255);
+      mu_label(ctx, "Line color (G):");
+      mu_slider(ctx, &draw_g, 0, 255);
+      mu_label(ctx, "Line color (B):");
+      mu_slider(ctx, &draw_b, 0, 255);
       mu_label(ctx, "mu_label: plain static text");
       mu_text(ctx, "mu_text: word-wrapped longer text that will reflow inside "
                    "the window width automatically.");
