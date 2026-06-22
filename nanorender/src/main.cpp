@@ -81,6 +81,18 @@ Transform compute_normalize_transform(const std::vector<Vertex>& verts, float ta
   t.translate = -center * scale;
   return t;
 }
+
+struct Point2D { int x, y; };
+
+Point2D project_vertex(const Vertex& v, const Transform& t) {
+  // Apply normalization: scale + translate
+  float wx = v.x * t.scale + t.translate.x;
+  float wy = v.y * t.scale + t.translate.y;
+  // Orthographic projection: drop Z, add screen center
+  int sx = (int)(wx + WIDTH / 2.0f);
+  int sy = (int)(-wy + HEIGHT / 2.0f); // flip Y (screen Y grows downward)
+  return {sx, sy};
+}
 std::vector<Face> g_mesh_faces;
 
 bool load_obj(const std::string& path) {
@@ -197,6 +209,16 @@ mfb_set_char_input_callback(
  // Draw live preview line while dragging
     if (g_is_dragging) {
       draw_line(g_drag_start_x, g_drag_start_y, (int)ctx->mouse_pos.x, (int)ctx->mouse_pos.y, MFB_RGB((uint8_t)draw_r, (uint8_t)draw_g, (uint8_t)draw_b));
+    }
+
+    // Draw wireframe mesh (Part 3 hw2)
+    for (const auto& face : g_mesh_faces) {
+      Point2D p0 = project_vertex(g_mesh_vertices[face.v0], norm_transform);
+      Point2D p1 = project_vertex(g_mesh_vertices[face.v1], norm_transform);
+      Point2D p2 = project_vertex(g_mesh_vertices[face.v2], norm_transform);
+      draw_line(p0.x, p0.y, p1.x, p1.y, MFB_RGB(255, 255, 255));
+      draw_line(p1.x, p1.y, p2.x, p2.y, MFB_RGB(255, 255, 255));
+      draw_line(p2.x, p2.y, p0.x, p0.y, MFB_RGB(255, 255, 255));
     }
     
     // 3. UI Logic
