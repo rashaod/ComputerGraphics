@@ -36,10 +36,11 @@ static glm::vec3 world_scale(1.0f);
 struct Line { int x0, y0, x1, y1; uint32_t color; };
 static Line g_lines[1000];
 static int g_line_count = 0;
-
 static bool g_is_dragging = false;
 static int g_drag_start_x = 0, g_drag_start_y = 0;
-
+static int show_world_axes = 1;
+static int show_local_axes = 1;
+static int show_bounding_box = 1;
 static float draw_r = 255.0f, draw_g = 255.0f, draw_b = 255.0f;
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
   int dx = abs(x1 - x0);
@@ -99,6 +100,12 @@ Point2D project_vertex(const Vertex& v, const Transform& t) {
   // Orthographic projection: drop Z, add screen center
   int sx = (int)(wx + WIDTH / 2.0f);
   int sy = (int)(-wy + HEIGHT / 2.0f); // flip Y (screen Y grows downward)
+  return {sx, sy};
+}
+// Project a transformed point (already in world space) to screen
+Point2D project_point(glm::vec4 p) {
+  int sx = (int)(p.x + WIDTH / 2.0f);
+  int sy = (int)(-p.y + HEIGHT / 2.0f);
   return {sx, sy};
 }
 
@@ -268,6 +275,82 @@ mfb_set_char_input_callback(
       draw_line(x1, y1, x2, y2, MFB_RGB(255, 255, 255));
       draw_line(x2, y2, x0, y0, MFB_RGB(255, 255, 255));
     }
+    // --- World Axes (fixed at origin) ---
+    if (show_world_axes) {
+      float axis_len = 100.0f;
+      // X axis - Red
+      Point2D wo = project_point(glm::vec4(0, 0, 0, 1));
+      Point2D wx = project_point(glm::vec4(axis_len, 0, 0, 1));
+      Point2D wy = project_point(glm::vec4(0, axis_len, 0, 1));
+      Point2D wz = project_point(glm::vec4(0, 0, axis_len, 1));
+      draw_line(wo.x, wo.y, wx.x, wx.y, MFB_RGB(255, 0, 0));   // X red
+      draw_line(wo.x, wo.y, wy.x, wy.y, MFB_RGB(0, 255, 0));   // Y green
+      draw_line(wo.x, wo.y, wz.x, wz.y, MFB_RGB(0, 0, 255));   // Z blue
+    }
+
+    // --- Local Axes (transformed with model) ---
+    if (show_local_axes) {
+      float axis_len = 150.0f;
+      auto xform = [&](glm::vec3 v) -> Point2D {
+        glm::vec4 p = M_final * glm::vec4(v, 1.0f);
+        return project_point(p);
+      };
+      // Center of model in local space (after normalization = origin)
+      glm::vec3 origin(0.0f);
+      Point2D lo = xform(origin);
+      Point2D lx = xform(glm::vec3(axis_len, 0, 0));
+      Point2D ly = xform(glm::vec3(0, axis_len, 0));
+      Point2D lz = xform(glm::vec3(0, 0, axis_len));
+      draw_line(lo.x, lo.y, lx.x, lx.y, MFB_RGB(255, 100, 100)); // X light red
+      draw_line(lo.x, lo.y, ly.x, ly.y, MFB_RGB(100, 255, 100)); // Y light green
+      draw_line(lo.x, lo.y, lz.x, lz.y, MFB_RGB(100, 100, 255)); // Z light blue
+    }
+
+    // --- Bounding Box ---
+    if (show_bounding_box) {
+      // Find bounding box in normalized space
+      glm::vec3 mn(1e9f), mx(-1e9f);
+      for (const auto& v : g_mesh_vertices) {
+        float nx = v.x * norm_transform.scale + norm_transform.translate.x;
+        float ny = v.y * norm_transform.scale + norm_transform.translate.y;
+        float nz = v.z * norm_transform.scale + norm_transform.translate.z;
+        mn.x = std::min(mn.x, nx); mx.x = std::max(mx.x, nx);
+        mn.y = std::min(mn.y, ny); mx.y = std::max(mx.y, ny);
+        mn.z = std::min(mn.z, nz); mx.z = std::max(mx.z, nz);
+      }
+
+      // 8 corners of the bounding box
+      glm::vec3 corners[8] = {
+        {mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z},
+        {mx.x, mx.y, mn.z}, {mn.x, mx.y, mn.z},
+        {mn.x, mn.y, mx.z}, {mx.x, mn.y, mx.z},
+        {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
+      };
+
+      // Transform and project all 8 corners
+      Point2D cp[8];
+      for (int i = 0; i < 8; i++) {
+        glm::vec4 p = M_final * glm::vec4(corners[i], 1.0f);
+        cp[i] = project_point(p);
+      }
+
+      uint32_t bbox_color = MFB_RGB(255, 255, 0); // yellow
+      // Bottom face
+      draw_line(cp[0].x,cp[0].y,cp[1].x,cp[1].y,bbox_color);
+      draw_line(cp[1].x,cp[1].y,cp[2].x,cp[2].y,bbox_color);
+      draw_line(cp[2].x,cp[2].y,cp[3].x,cp[3].y,bbox_color);
+      draw_line(cp[3].x,cp[3].y,cp[0].x,cp[0].y,bbox_color);
+      // Top face
+      draw_line(cp[4].x,cp[4].y,cp[5].x,cp[5].y,bbox_color);
+      draw_line(cp[5].x,cp[5].y,cp[6].x,cp[6].y,bbox_color);
+      draw_line(cp[6].x,cp[6].y,cp[7].x,cp[7].y,bbox_color);
+      draw_line(cp[7].x,cp[7].y,cp[4].x,cp[4].y,bbox_color);
+      // Vertical edges
+      draw_line(cp[0].x,cp[0].y,cp[4].x,cp[4].y,bbox_color);
+      draw_line(cp[1].x,cp[1].y,cp[5].x,cp[5].y,bbox_color);
+      draw_line(cp[2].x,cp[2].y,cp[6].x,cp[6].y,bbox_color);
+      draw_line(cp[3].x,cp[3].y,cp[7].x,cp[7].y,bbox_color);
+    }
     
     // 3. UI Logic
     static float slider_val = 50.0f;
@@ -373,7 +456,10 @@ mfb_set_char_input_callback(
       // Local Transforms
       mu_layout_row(ctx, 1, w, 0);
       mu_label(ctx, "--- Local Transforms ---");
-
+      mu_layout_row(ctx, 1, w, 0);
+      mu_checkbox(ctx, "Show World Axes", &show_world_axes);
+      mu_checkbox(ctx, "Show Local Axes", &show_local_axes);
+      mu_checkbox(ctx, "Show Bounding Box", &show_bounding_box);
       mu_label(ctx, "Local Translation:");
       mu_slider(ctx, &local_translation.x, -500.0f, 500.0f);
       mu_slider(ctx, &local_translation.y, -500.0f, 500.0f);
