@@ -152,8 +152,8 @@ int main() {
   mu_Context *ctx = (mu_Context *)malloc(sizeof(mu_Context));
   mu_init(ctx);
 
-  load_obj("assets/pyramid.obj");
-
+load_obj("assets/icosphere.obj");
+ 
   Transform norm_transform = compute_normalize_transform(g_mesh_vertices, 600.0f);
   printf("Normalize: scale=%.4f, translate=(%.2f, %.2f, %.2f)\n",
          norm_transform.scale, norm_transform.translate.x, norm_transform.translate.y, norm_transform.translate.z);
