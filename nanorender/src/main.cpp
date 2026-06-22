@@ -9,6 +9,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <algorithm>
 
 
 extern "C" {
@@ -55,6 +56,31 @@ struct Vertex { float x, y, z; };
 struct Face { int v0, v1, v2; };
 
 std::vector<Vertex> g_mesh_vertices;
+struct Transform {
+  float scale;
+  glm::vec3 translate; // applied after scaling, to center on screen
+};
+Transform compute_normalize_transform(const std::vector<Vertex>& verts, float target_size) {
+  glm::vec3 min_v(1e9f), max_v(-1e9f);
+  for (const auto& v : verts) {
+    min_v.x = std::min(min_v.x, v.x);
+    min_v.y = std::min(min_v.y, v.y);
+    min_v.z = std::min(min_v.z, v.z);
+    max_v.x = std::max(max_v.x, v.x);
+    max_v.y = std::max(max_v.y, v.y);
+    max_v.z = std::max(max_v.z, v.z);
+  }
+  glm::vec3 extent = max_v - min_v;
+  float largest_extent = std::max({extent.x, extent.y, extent.z});
+  float scale = (largest_extent > 0.0001f) ? (target_size / largest_extent) : 1.0f;
+  glm::vec3 center = (min_v + max_v) * 0.5f;
+  Transform t;
+  t.scale = scale;
+  // After scaling by 'scale', the center should map to (0,0,0); we'll add the
+  // screen-center offset later in the projection step.
+  t.translate = -center * scale;
+  return t;
+}
 std::vector<Face> g_mesh_faces;
 
 bool load_obj(const std::string& path) {
@@ -63,7 +89,6 @@ bool load_obj(const std::string& path) {
     printf("Failed to open OBJ file: %s\n", path.c_str());
     return false;
   }
-
   g_mesh_vertices.clear();
   g_mesh_faces.clear();
 
@@ -103,6 +128,10 @@ int main() {
   mu_init(ctx);
 
   load_obj("assets/pyramid.obj");
+
+  Transform norm_transform = compute_normalize_transform(g_mesh_vertices, 600.0f);
+  printf("Normalize: scale=%.4f, translate=(%.2f, %.2f, %.2f)\n",
+         norm_transform.scale, norm_transform.translate.x, norm_transform.translate.y, norm_transform.translate.z);
 
   // Set font callbacks for microui
   ctx->text_width = [](mu_Font font, const char *str, int len) {
