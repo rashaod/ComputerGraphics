@@ -28,7 +28,8 @@ static int waves_enabled = 1;
 static glm::vec3 local_translation(0.0f);
 static glm::vec3 local_rotation(0.0f);    // degrees
 static glm::vec3 local_scale(1.0f);
-
+static float fov = 60.0f;        // field of view in degrees
+static int use_perspective = 1;  // toggle between perspective/ortho
 // World transform controls
 static glm::vec3 world_translation(0.0f);
 static glm::vec3 world_rotation(0.0f);    // degrees
@@ -106,8 +107,11 @@ Point2D project_vertex(const Vertex& v, const Transform& t) {
 }
 // Project a transformed point (already in world space) to screen
 Point2D project_point(glm::vec4 p) {
-  int sx = (int)(p.x + WIDTH / 2.0f);
-  int sy = (int)(-p.y + HEIGHT / 2.0f);
+  if (abs(p.w) < 0.0001f) return {0, 0};
+  float nx = p.x / p.w;
+  float ny = p.y / p.w;
+  int sx = (int)((nx + 1.0f) * 0.5f * WIDTH);
+  int sy = (int)((1.0f - ny) * 0.5f * HEIGHT);
   return {sx, sy};
 }
 
@@ -261,7 +265,11 @@ mfb_set_char_input_callback(
     glm::mat4 M_local = build_transform(local_translation, local_rotation, local_scale);
     glm::mat4 M_world = build_transform(world_translation, world_rotation, world_scale);
     glm::mat4 V = build_view_matrix(cam_position, cam_rotation);
-    glm::mat4 M_final = V * M_world * M_local;
+    float aspect = (float)WIDTH / (float)HEIGHT;
+    glm::mat4 P = use_perspective ?
+        glm::perspective(glm::radians(fov), aspect, 1.0f, 5000.0f) :
+        glm::ortho(-(float)WIDTH/2, (float)WIDTH/2, -(float)HEIGHT/2, (float)HEIGHT/2, -5000.0f, 5000.0f);
+    glm::mat4 M_final = P * V * M_world * M_local;
 
     for (const auto& face : g_mesh_faces) {
       // Get 3 vertices of this face
@@ -281,49 +289,53 @@ mfb_set_char_input_callback(
       glm::vec4 t1 = apply(v1);
       glm::vec4 t2 = apply(v2);
 
-      // Orthographic projection: drop Z, add screen center
-      int x0 = (int)(t0.x + WIDTH / 2.0f),  y0 = (int)(-t0.y + HEIGHT / 2.0f);
-      int x1 = (int)(t1.x + WIDTH / 2.0f),  y1 = (int)(-t1.y + HEIGHT / 2.0f);
-      int x2 = (int)(t2.x + WIDTH / 2.0f),  y2 = (int)(-t2.y + HEIGHT / 2.0f);
-
+   // Perspective divide (divide by w) then map NDC to screen
+      auto to_screen = [&](glm::vec4 v) -> std::pair<int,int> {
+        if (abs(v.w) < 0.0001f) return {0, 0};
+        float nx = v.x / v.w;
+        float ny = v.y / v.w;
+        int sx = (int)((nx + 1.0f) * 0.5f * WIDTH);
+        int sy = (int)((1.0f - ny) * 0.5f * HEIGHT);
+        return {sx, sy};
+      };
+      auto [x0, y0] = to_screen(t0);
+      auto [x1, y1] = to_screen(t1);
+      auto [x2, y2] = to_screen(t2);
       draw_line(x0, y0, x1, y1, MFB_RGB(255, 255, 255));
       draw_line(x1, y1, x2, y2, MFB_RGB(255, 255, 255));
       draw_line(x2, y2, x0, y0, MFB_RGB(255, 255, 255));
     }
-    // --- World Axes (fixed at origin) ---
+// --- World Axes (fixed at origin) ---
     if (show_world_axes) {
       float axis_len = 100.0f;
-      // X axis - Red
-      Point2D wo = project_point(glm::vec4(0, 0, 0, 1));
-      Point2D wx = project_point(glm::vec4(axis_len, 0, 0, 1));
-      Point2D wy = project_point(glm::vec4(0, axis_len, 0, 1));
-      Point2D wz = project_point(glm::vec4(0, 0, axis_len, 1));
-      draw_line(wo.x, wo.y, wx.x, wx.y, MFB_RGB(255, 0, 0));   // X red
-      draw_line(wo.x, wo.y, wy.x, wy.y, MFB_RGB(0, 255, 0));   // Y green
-      draw_line(wo.x, wo.y, wz.x, wz.y, MFB_RGB(0, 0, 255));   // Z blue
+      glm::mat4 PV = P * V;
+      Point2D wo = project_point(PV * glm::vec4(0, 0, 0, 1));
+      Point2D wx = project_point(PV * glm::vec4(axis_len, 0, 0, 1));
+      Point2D wy = project_point(PV * glm::vec4(0, axis_len, 0, 1));
+      Point2D wz = project_point(PV * glm::vec4(0, 0, axis_len, 1));
+      draw_line(wo.x, wo.y, wx.x, wx.y, MFB_RGB(255, 0, 0));
+      draw_line(wo.x, wo.y, wy.x, wy.y, MFB_RGB(0, 255, 0));
+      draw_line(wo.x, wo.y, wz.x, wz.y, MFB_RGB(0, 0, 255));
     }
 
     // --- Local Axes (transformed with model) ---
     if (show_local_axes) {
       float axis_len = 150.0f;
+      glm::mat4 PVM = P * V * M_world * M_local;
       auto xform = [&](glm::vec3 v) -> Point2D {
-        glm::vec4 p = M_final * glm::vec4(v, 1.0f);
-        return project_point(p);
+        return project_point(PVM * glm::vec4(v, 1.0f));
       };
-      // Center of model in local space (after normalization = origin)
-      glm::vec3 origin(0.0f);
-      Point2D lo = xform(origin);
+      Point2D lo = xform(glm::vec3(0.0f));
       Point2D lx = xform(glm::vec3(axis_len, 0, 0));
       Point2D ly = xform(glm::vec3(0, axis_len, 0));
       Point2D lz = xform(glm::vec3(0, 0, axis_len));
-      draw_line(lo.x, lo.y, lx.x, lx.y, MFB_RGB(255, 100, 100)); // X light red
-      draw_line(lo.x, lo.y, ly.x, ly.y, MFB_RGB(100, 255, 100)); // Y light green
-      draw_line(lo.x, lo.y, lz.x, lz.y, MFB_RGB(100, 100, 255)); // Z light blue
+      draw_line(lo.x, lo.y, lx.x, lx.y, MFB_RGB(255, 100, 100));
+      draw_line(lo.x, lo.y, ly.x, ly.y, MFB_RGB(100, 255, 100));
+      draw_line(lo.x, lo.y, lz.x, lz.y, MFB_RGB(100, 100, 255));
     }
 
     // --- Bounding Box ---
     if (show_bounding_box) {
-      // Find bounding box in normalized space
       glm::vec3 mn(1e9f), mx(-1e9f);
       for (const auto& v : g_mesh_vertices) {
         float nx = v.x * norm_transform.scale + norm_transform.translate.x;
@@ -333,34 +345,25 @@ mfb_set_char_input_callback(
         mn.y = std::min(mn.y, ny); mx.y = std::max(mx.y, ny);
         mn.z = std::min(mn.z, nz); mx.z = std::max(mx.z, nz);
       }
-
-      // 8 corners of the bounding box
       glm::vec3 corners[8] = {
-        {mn.x, mn.y, mn.z}, {mx.x, mn.y, mn.z},
-        {mx.x, mx.y, mn.z}, {mn.x, mx.y, mn.z},
-        {mn.x, mn.y, mx.z}, {mx.x, mn.y, mx.z},
-        {mx.x, mx.y, mx.z}, {mn.x, mx.y, mx.z}
+        {mn.x,mn.y,mn.z},{mx.x,mn.y,mn.z},
+        {mx.x,mx.y,mn.z},{mn.x,mx.y,mn.z},
+        {mn.x,mn.y,mx.z},{mx.x,mn.y,mx.z},
+        {mx.x,mx.y,mx.z},{mn.x,mx.y,mx.z}
       };
-
-      // Transform and project all 8 corners
+      glm::mat4 PVM = P * M_final;
       Point2D cp[8];
-      for (int i = 0; i < 8; i++) {
-        glm::vec4 p = M_final * glm::vec4(corners[i], 1.0f);
-        cp[i] = project_point(p);
-      }
-
-      uint32_t bbox_color = MFB_RGB(255, 255, 0); // yellow
-      // Bottom face
+      for (int i = 0; i < 8; i++)
+        cp[i] = project_point(PVM * glm::vec4(corners[i], 1.0f));
+      uint32_t bbox_color = MFB_RGB(255, 255, 0);
       draw_line(cp[0].x,cp[0].y,cp[1].x,cp[1].y,bbox_color);
       draw_line(cp[1].x,cp[1].y,cp[2].x,cp[2].y,bbox_color);
       draw_line(cp[2].x,cp[2].y,cp[3].x,cp[3].y,bbox_color);
       draw_line(cp[3].x,cp[3].y,cp[0].x,cp[0].y,bbox_color);
-      // Top face
       draw_line(cp[4].x,cp[4].y,cp[5].x,cp[5].y,bbox_color);
       draw_line(cp[5].x,cp[5].y,cp[6].x,cp[6].y,bbox_color);
       draw_line(cp[6].x,cp[6].y,cp[7].x,cp[7].y,bbox_color);
       draw_line(cp[7].x,cp[7].y,cp[4].x,cp[4].y,bbox_color);
-      // Vertical edges
       draw_line(cp[0].x,cp[0].y,cp[4].x,cp[4].y,bbox_color);
       draw_line(cp[1].x,cp[1].y,cp[5].x,cp[5].y,bbox_color);
       draw_line(cp[2].x,cp[2].y,cp[6].x,cp[6].y,bbox_color);
@@ -521,9 +524,14 @@ mfb_set_char_input_callback(
       mu_slider(ctx, &cam_position.z, 100.0f, 2000.0f);
       mu_label(ctx, "Camera Rotation (deg):");
       mu_slider(ctx, &cam_rotation.x, -90.0f, 90.0f);
-      mu_slider(ctx, &cam_rotation.y, -180.0f, 180.0f);
+     mu_slider(ctx, &cam_rotation.y, -180.0f, 180.0f);
+      mu_layout_row(ctx, 1, w, 0);
+      mu_label(ctx, "Field of View:");
+      mu_slider(ctx, &fov, 10.0f, 120.0f);
+      mu_checkbox(ctx, "Perspective (off=Ortho)", &use_perspective);
       mu_end_window(ctx);
     }
+    
 
     // --- Panel window ---
     if (mu_begin_window(ctx, "Panel Demo", mu_rect(395, 20, 380, 200))) {
