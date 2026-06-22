@@ -11,7 +11,6 @@
 #include <string>
 #include <algorithm>
 
-
 extern "C" {
 #include "microui.h"
 }
@@ -25,6 +24,15 @@ static uint32_t g_buffer[WIDTH * HEIGHT];
 static float g_color_phase = 0.0f;
 static float wave_freq = 0.02f;
 static int waves_enabled = 1;
+// Local transform controls
+static glm::vec3 local_translation(0.0f);
+static glm::vec3 local_rotation(0.0f);    // degrees
+static glm::vec3 local_scale(1.0f);
+
+// World transform controls
+static glm::vec3 world_translation(0.0f);
+static glm::vec3 world_rotation(0.0f);    // degrees
+static glm::vec3 world_scale(1.0f);
 struct Line { int x0, y0, x1, y1; uint32_t color; };
 static Line g_lines[1000];
 static int g_line_count = 0;
@@ -315,6 +323,50 @@ mfb_set_char_input_callback(
       if (mu_button(ctx, "Quit")) {
         quit_requested = true;
       }
+
+      mu_end_window(ctx);
+    }
+    // --- Transform Controls window ---
+    if (mu_begin_window(ctx, "Transform Controls", mu_rect(20, 300, 360, 500))) {
+      int w[] = {-1};
+
+      // Local Transforms
+      mu_layout_row(ctx, 1, w, 0);
+      mu_label(ctx, "--- Local Transforms ---");
+
+      mu_label(ctx, "Local Translation:");
+      mu_slider(ctx, &local_translation.x, -500.0f, 500.0f);
+      mu_slider(ctx, &local_translation.y, -500.0f, 500.0f);
+      mu_slider(ctx, &local_translation.z, -500.0f, 500.0f);
+
+      mu_label(ctx, "Local Rotation (deg):");
+      mu_slider(ctx, &local_rotation.x, -180.0f, 180.0f);
+      mu_slider(ctx, &local_rotation.y, -180.0f, 180.0f);
+      mu_slider(ctx, &local_rotation.z, -180.0f, 180.0f);
+
+      mu_label(ctx, "Local Scale:");
+      mu_slider(ctx, &local_scale.x, 0.1f, 5.0f);
+      mu_slider(ctx, &local_scale.y, 0.1f, 5.0f);
+      mu_slider(ctx, &local_scale.z, 0.1f, 5.0f);
+
+      // World Transforms
+      mu_layout_row(ctx, 1, w, 0);
+      mu_label(ctx, "--- World Transforms ---");
+
+      mu_label(ctx, "World Translation:");
+      mu_slider(ctx, &world_translation.x, -500.0f, 500.0f);
+      mu_slider(ctx, &world_translation.y, -500.0f, 500.0f);
+      mu_slider(ctx, &world_translation.z, -500.0f, 500.0f);
+
+      mu_label(ctx, "World Rotation (deg):");
+      mu_slider(ctx, &world_rotation.x, -180.0f, 180.0f);
+      mu_slider(ctx, &world_rotation.y, -180.0f, 180.0f);
+      mu_slider(ctx, &world_rotation.z, -180.0f, 180.0f);
+
+      mu_label(ctx, "World Scale:");
+      mu_slider(ctx, &world_scale.x, 0.1f, 5.0f);
+      mu_slider(ctx, &world_scale.y, 0.1f, 5.0f);
+      mu_slider(ctx, &world_scale.z, 0.1f, 5.0f);
 
       mu_end_window(ctx);
     }
