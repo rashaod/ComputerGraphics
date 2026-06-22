@@ -144,12 +144,6 @@ bool load_obj(const std::string& path) {
   return true;
 }
 int main() {
- // GLM test (Part 0) - confirm library works
-  glm::vec3 test_vec(1.0f, 2.0f, 3.0f);
-  glm::mat4 test_mat = glm::translate(glm::mat4(1.0f), glm::vec3(5.0f, 0.0f, 0.0f));
-  glm::vec4 result = test_mat * glm::vec4(test_vec, 1.0f);
-  printf("GLM test: translated vec3(1,2,3) by (5,0,0) -> (%.1f, %.1f, %.1f)\n", result.x, result.y, result.z);
-
   struct mfb_window *window =
       mfb_open_ex("MiniGUI Platform", WIDTH, HEIGHT, MFB_WF_RESIZABLE);
   if (!window)
@@ -181,6 +175,18 @@ mfb_set_char_input_callback(
         }
         extern void ui_bridge_char_input(struct mfb_window *, unsigned int);
         ui_bridge_char_input(w, c);
+      },
+      window);
+
+      mfb_set_keyboard_callback(
+      [](struct mfb_window *w, mfb_key key, mfb_key_mod mod, bool isPressed) {
+        (void)w; (void)mod;
+        if (!isPressed) return;
+        float step = 10.0f;
+        if (key == MFB_KB_KEY_RIGHT) world_translation.x += step;
+        if (key == MFB_KB_KEY_LEFT)  world_translation.x -= step;
+        if (key == MFB_KB_KEY_UP)    world_translation.y += step;
+        if (key == MFB_KB_KEY_DOWN)  world_translation.y -= step;
       },
       window);
 
