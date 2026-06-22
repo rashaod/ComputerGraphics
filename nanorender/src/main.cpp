@@ -41,6 +41,8 @@ static int g_drag_start_x = 0, g_drag_start_y = 0;
 static int show_world_axes = 1;
 static int show_local_axes = 1;
 static int show_bounding_box = 1;
+static glm::vec3 cam_position(0.0f, 0.0f, 500.0f);
+static glm::vec3 cam_rotation(0.0f, 0.0f, 0.0f);
 static float draw_r = 255.0f, draw_g = 255.0f, draw_b = 255.0f;
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
   int dx = abs(x1 - x0);
@@ -118,6 +120,18 @@ glm::mat4 build_transform(glm::vec3 translation, glm::vec3 rotation_deg, glm::ve
   glm::mat4 Rz = glm::rotate(glm::mat4(1.0f), glm::radians(rotation_deg.z), glm::vec3(0,0,1));
   glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
   return T * Rz * Ry * Rx * S;
+}
+glm::mat4 build_view_matrix(glm::vec3 position, glm::vec3 rotation_deg) {
+  // View matrix = inverse of camera's world transform
+  // Camera rotates then translates, so view = inverse(T * R) = inv(R) * inv(T)
+  glm::mat4 Rx = glm::rotate(glm::mat4(1.0f), glm::radians(rotation_deg.x), glm::vec3(1,0,0));
+  glm::mat4 Ry = glm::rotate(glm::mat4(1.0f), glm::radians(rotation_deg.y), glm::vec3(0,1,0));
+  glm::mat4 R = Ry * Rx;
+  // Inverse of rotation = transpose (for orthogonal matrices)
+  glm::mat4 inv_R = glm::transpose(R);
+  // Inverse of translation = negate position
+  glm::mat4 inv_T = glm::translate(glm::mat4(1.0f), -position);
+  return inv_R * inv_T;
 }
 std::vector<Face> g_mesh_faces;
 
@@ -246,7 +260,8 @@ mfb_set_char_input_callback(
  // Draw wireframe mesh with transformations (Part 5)
     glm::mat4 M_local = build_transform(local_translation, local_rotation, local_scale);
     glm::mat4 M_world = build_transform(world_translation, world_rotation, world_scale);
-    glm::mat4 M_final = M_world * M_local;
+    glm::mat4 V = build_view_matrix(cam_position, cam_rotation);
+    glm::mat4 M_final = V * M_world * M_local;
 
     for (const auto& face : g_mesh_faces) {
       // Get 3 vertices of this face
@@ -494,6 +509,19 @@ mfb_set_char_input_callback(
       mu_slider(ctx, &world_scale.y, 0.1f, 5.0f);
       mu_slider(ctx, &world_scale.z, 0.1f, 5.0f);
 
+      mu_end_window(ctx);
+    }
+    // --- Camera Controls window ---
+    if (mu_begin_window(ctx, "Camera Controls", mu_rect(390, 20, 300, 200))) {
+      int w[] = {-1};
+      mu_layout_row(ctx, 1, w, 0);
+      mu_label(ctx, "Camera Position:");
+      mu_slider(ctx, &cam_position.x, -1000.0f, 1000.0f);
+      mu_slider(ctx, &cam_position.y, -1000.0f, 1000.0f);
+      mu_slider(ctx, &cam_position.z, 100.0f, 2000.0f);
+      mu_label(ctx, "Camera Rotation (deg):");
+      mu_slider(ctx, &cam_rotation.x, -90.0f, 90.0f);
+      mu_slider(ctx, &cam_rotation.y, -180.0f, 180.0f);
       mu_end_window(ctx);
     }
 
