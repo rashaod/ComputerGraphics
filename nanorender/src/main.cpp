@@ -101,6 +101,17 @@ Point2D project_vertex(const Vertex& v, const Transform& t) {
   int sy = (int)(-wy + HEIGHT / 2.0f); // flip Y (screen Y grows downward)
   return {sx, sy};
 }
+
+#include <glm/gtc/matrix_transform.hpp>
+
+glm::mat4 build_transform(glm::vec3 translation, glm::vec3 rotation_deg, glm::vec3 scale) {
+  glm::mat4 T = glm::translate(glm::mat4(1.0f), translation);
+  glm::mat4 Rx = glm::rotate(glm::mat4(1.0f), glm::radians(rotation_deg.x), glm::vec3(1,0,0));
+  glm::mat4 Ry = glm::rotate(glm::mat4(1.0f), glm::radians(rotation_deg.y), glm::vec3(0,1,0));
+  glm::mat4 Rz = glm::rotate(glm::mat4(1.0f), glm::radians(rotation_deg.z), glm::vec3(0,0,1));
+  glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
+  return T * Rz * Ry * Rx * S;
+}
 std::vector<Face> g_mesh_faces;
 
 bool load_obj(const std::string& path) {
@@ -219,14 +230,37 @@ mfb_set_char_input_callback(
       draw_line(g_drag_start_x, g_drag_start_y, (int)ctx->mouse_pos.x, (int)ctx->mouse_pos.y, MFB_RGB((uint8_t)draw_r, (uint8_t)draw_g, (uint8_t)draw_b));
     }
 
-    // Draw wireframe mesh (Part 3 hw2)
+ // Draw wireframe mesh with transformations (Part 5)
+    glm::mat4 M_local = build_transform(local_translation, local_rotation, local_scale);
+    glm::mat4 M_world = build_transform(world_translation, world_rotation, world_scale);
+    glm::mat4 M_final = M_world * M_local;
+
     for (const auto& face : g_mesh_faces) {
-      Point2D p0 = project_vertex(g_mesh_vertices[face.v0], norm_transform);
-      Point2D p1 = project_vertex(g_mesh_vertices[face.v1], norm_transform);
-      Point2D p2 = project_vertex(g_mesh_vertices[face.v2], norm_transform);
-      draw_line(p0.x, p0.y, p1.x, p1.y, MFB_RGB(255, 255, 255));
-      draw_line(p1.x, p1.y, p2.x, p2.y, MFB_RGB(255, 255, 255));
-      draw_line(p2.x, p2.y, p0.x, p0.y, MFB_RGB(255, 255, 255));
+      // Get 3 vertices of this face
+      Vertex v0 = g_mesh_vertices[face.v0];
+      Vertex v1 = g_mesh_vertices[face.v1];
+      Vertex v2 = g_mesh_vertices[face.v2];
+
+      // Apply normalization first, then transformation matrix
+      auto apply = [&](Vertex v) -> glm::vec4 {
+        float nx = v.x * norm_transform.scale + norm_transform.translate.x;
+        float ny = v.y * norm_transform.scale + norm_transform.translate.y;
+        float nz = v.z * norm_transform.scale + norm_transform.translate.z;
+        return M_final * glm::vec4(nx, ny, nz, 1.0f);
+      };
+
+      glm::vec4 t0 = apply(v0);
+      glm::vec4 t1 = apply(v1);
+      glm::vec4 t2 = apply(v2);
+
+      // Orthographic projection: drop Z, add screen center
+      int x0 = (int)(t0.x + WIDTH / 2.0f),  y0 = (int)(-t0.y + HEIGHT / 2.0f);
+      int x1 = (int)(t1.x + WIDTH / 2.0f),  y1 = (int)(-t1.y + HEIGHT / 2.0f);
+      int x2 = (int)(t2.x + WIDTH / 2.0f),  y2 = (int)(-t2.y + HEIGHT / 2.0f);
+
+      draw_line(x0, y0, x1, y1, MFB_RGB(255, 255, 255));
+      draw_line(x1, y1, x2, y2, MFB_RGB(255, 255, 255));
+      draw_line(x2, y2, x0, y0, MFB_RGB(255, 255, 255));
     }
     
     // 3. UI Logic
