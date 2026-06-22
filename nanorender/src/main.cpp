@@ -45,6 +45,10 @@ static int show_bounding_box = 1;
 static glm::vec3 cam_position(0.0f, 0.0f, 500.0f);
 static glm::vec3 cam_rotation(0.0f, 0.0f, 0.0f);
 static float draw_r = 255.0f, draw_g = 255.0f, draw_b = 255.0f;
+static std::vector<glm::vec3> g_face_normals;
+static std::vector<glm::vec3> g_vertex_normals;
+static int show_face_normals = 0;
+static int show_vertex_normals = 0;
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
   int dx = abs(x1 - x0);
   int dy = -abs(y1 - y0);
@@ -72,6 +76,7 @@ struct Transform {
   float scale;
   glm::vec3 translate; // applied after scaling, to center on screen
 };
+static Transform norm_transform;
 Transform compute_normalize_transform(const std::vector<Vertex>& verts, float target_size) {
   glm::vec3 min_v(1e9f), max_v(-1e9f);
   for (const auto& v : verts) {
@@ -168,6 +173,36 @@ bool load_obj(const std::string& path) {
   printf("Loaded OBJ: %zu vertices, %zu faces\n", g_mesh_vertices.size(), g_mesh_faces.size());
   return true;
 }
+void compute_normals() {
+  int nf = (int)g_mesh_faces.size();
+  int nv = (int)g_mesh_vertices.size();
+
+  g_face_normals.resize(nf);
+  g_vertex_normals.assign(nv, glm::vec3(0.0f));
+
+  // Compute face normals
+  for (int i = 0; i < nf; i++) {
+    const Face& f = g_mesh_faces[i];
+    glm::vec3 v0(g_mesh_vertices[f.v0].x, g_mesh_vertices[f.v0].y, g_mesh_vertices[f.v0].z);
+    glm::vec3 v1(g_mesh_vertices[f.v1].x, g_mesh_vertices[f.v1].y, g_mesh_vertices[f.v1].z);
+    glm::vec3 v2(g_mesh_vertices[f.v2].x, g_mesh_vertices[f.v2].y, g_mesh_vertices[f.v2].z);
+    glm::vec3 edge1 = v1 - v0;
+    glm::vec3 edge2 = v2 - v0;
+    g_face_normals[i] = glm::normalize(glm::cross(edge1, edge2));
+    // Accumulate into vertex normals
+    g_vertex_normals[f.v0] += g_face_normals[i];
+    g_vertex_normals[f.v1] += g_face_normals[i];
+    g_vertex_normals[f.v2] += g_face_normals[i];
+  }
+
+  // Normalize vertex normals
+  for (auto& vn : g_vertex_normals) {
+    if (glm::length(vn) > 0.0001f)
+      vn = glm::normalize(vn);
+  }
+
+  printf("Computed %d face normals, %d vertex normals\n", nf, nv);
+}
 int main() {
   struct mfb_window *window =
       mfb_open_ex("MiniGUI Platform", WIDTH, HEIGHT, MFB_WF_RESIZABLE);
@@ -177,9 +212,10 @@ int main() {
   mu_Context *ctx = (mu_Context *)malloc(sizeof(mu_Context));
   mu_init(ctx);
 
-load_obj("assets/icosphere.obj");
+  load_obj("assets/icosphere.obj");
+  norm_transform = compute_normalize_transform(g_mesh_vertices, 600.0f);
+  compute_normals();
  
-  Transform norm_transform = compute_normalize_transform(g_mesh_vertices, 600.0f);
   printf("Normalize: scale=%.4f, translate=(%.2f, %.2f, %.2f)\n",
          norm_transform.scale, norm_transform.translate.x, norm_transform.translate.y, norm_transform.translate.z);
 
@@ -369,7 +405,46 @@ mfb_set_char_input_callback(
       draw_line(cp[2].x,cp[2].y,cp[6].x,cp[6].y,bbox_color);
       draw_line(cp[3].x,cp[3].y,cp[7].x,cp[7].y,bbox_color);
     }
-    
+    // --- Face Normals ---
+    if (show_face_normals) {
+      float normal_len = 30.0f;
+      for (int i = 0; i < (int)g_mesh_faces.size(); i++) {
+        const Face& f = g_mesh_faces[i];
+        // Face center in normalized space
+        auto norm_v = [&](int idx) -> glm::vec3 {
+          return glm::vec3(
+            g_mesh_vertices[idx].x * norm_transform.scale + norm_transform.translate.x,
+            g_mesh_vertices[idx].y * norm_transform.scale + norm_transform.translate.y,
+            g_mesh_vertices[idx].z * norm_transform.scale + norm_transform.translate.z
+          );
+        };
+        glm::vec3 center = (norm_v(f.v0) + norm_v(f.v1) + norm_v(f.v2)) / 3.0f;
+        glm::vec3 tip = center + g_face_normals[i] * normal_len;
+        glm::vec4 pc = M_final * glm::vec4(center, 1.0f);
+        glm::vec4 pt = M_final * glm::vec4(tip, 1.0f);
+        Point2D p0 = project_point(pc);
+        Point2D p1 = project_point(pt);
+        draw_line(p0.x, p0.y, p1.x, p1.y, MFB_RGB(255, 165, 0)); // orange
+      }
+    }
+
+    // --- Vertex Normals ---
+    if (show_vertex_normals) {
+      float normal_len = 30.0f;
+      for (int i = 0; i < (int)g_mesh_vertices.size(); i++) {
+        glm::vec3 vpos(
+          g_mesh_vertices[i].x * norm_transform.scale + norm_transform.translate.x,
+          g_mesh_vertices[i].y * norm_transform.scale + norm_transform.translate.y,
+          g_mesh_vertices[i].z * norm_transform.scale + norm_transform.translate.z
+        );
+        glm::vec3 tip = vpos + g_vertex_normals[i] * normal_len;
+        glm::vec4 pc = M_final * glm::vec4(vpos, 1.0f);
+        glm::vec4 pt = M_final * glm::vec4(tip, 1.0f);
+        Point2D p0 = project_point(pc);
+        Point2D p1 = project_point(pt);
+        draw_line(p0.x, p0.y, p1.x, p1.y, MFB_RGB(0, 255, 255)); // cyan
+      }
+    }
     // 3. UI Logic
     static float slider_val = 50.0f;
     static float number_val = 3.14f;
@@ -478,6 +553,8 @@ mfb_set_char_input_callback(
       mu_checkbox(ctx, "Show World Axes", &show_world_axes);
       mu_checkbox(ctx, "Show Local Axes", &show_local_axes);
       mu_checkbox(ctx, "Show Bounding Box", &show_bounding_box);
+      mu_checkbox(ctx, "Show Face Normals", &show_face_normals);
+      mu_checkbox(ctx, "Show Vertex Normals", &show_vertex_normals);
       mu_label(ctx, "Local Translation:");
       mu_slider(ctx, &local_translation.x, -500.0f, 500.0f);
       mu_slider(ctx, &local_translation.y, -500.0f, 500.0f);
