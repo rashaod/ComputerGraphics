@@ -49,6 +49,8 @@ static std::vector<glm::vec3> g_face_normals;
 static std::vector<glm::vec3> g_vertex_normals;
 static int show_face_normals = 0;
 static int show_vertex_normals = 0;
+static int show_bounding_boxes = 0;  // Part 1 debug toggle
+static int show_filled = 0;          // Part 2 toggle (we'll use later)
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
   int dx = abs(x1 - x0);
   int dy = -abs(y1 - y0);
@@ -211,6 +213,17 @@ void compute_normals() {
 
   printf("Computed %d face normals, %d vertex normals\n", nf, nv);
 }
+uint32_t face_color(int face_index) {
+  // Simple hash to generate consistent random color per face
+  int r = (face_index * 73856093) & 0xFF;
+  int g = (face_index * 19349663) & 0xFF;
+  int b = (face_index * 83492791) & 0xFF;
+  // Make sure colors aren't too dark
+  r = std::max(r, 50);
+  g = std::max(g, 50);
+  b = std::max(b, 50);
+  return MFB_RGB(r, g, b);
+}
 int main() {
   struct mfb_window *window =
       mfb_open_ex("MiniGUI Platform", WIDTH, HEIGHT, MFB_WF_RESIZABLE);
@@ -349,6 +362,55 @@ mfb_set_char_input_callback(
       draw_line(x1, y1, x2, y2, MFB_RGB(255, 255, 255));
       draw_line(x2, y2, x0, y0, MFB_RGB(255, 255, 255));
     }
+  // Part 1: Bounding Box Rasterization
+    if (show_bounding_boxes) {
+      for (int fi = 0; fi < (int)g_mesh_faces.size(); fi++) {
+        const Face& face = g_mesh_faces[fi];
+        Vertex v0 = g_mesh_vertices[face.v0];
+        Vertex v1 = g_mesh_vertices[face.v1];
+        Vertex v2 = g_mesh_vertices[face.v2];
+
+        // Apply normalization + transformation
+        auto apply = [&](Vertex v) -> glm::vec4 {
+          float nx = v.x * norm_transform.scale + norm_transform.translate.x;
+          float ny = v.y * norm_transform.scale + norm_transform.translate.y;
+          float nz = v.z * norm_transform.scale + norm_transform.translate.z;
+          return M_final * glm::vec4(nx, ny, nz, 1.0f);
+        };
+
+        glm::vec4 t0 = apply(v0);
+        glm::vec4 t1 = apply(v1);
+        glm::vec4 t2 = apply(v2);
+
+        // Perspective divide
+        auto to_screen = [&](glm::vec4 v) -> std::pair<int,int> {
+          if (abs(v.w) < 0.0001f) return {0, 0};
+          float nx = v.x / v.w;
+          float ny = v.y / v.w;
+          int sx = (int)((nx + 1.0f) * 0.5f * WIDTH);
+          int sy = (int)((1.0f - ny) * 0.5f * HEIGHT);
+          return {sx, sy};
+        };
+
+        auto [x0, y0] = to_screen(t0);
+        auto [x1, y1] = to_screen(t1);
+        auto [x2, y2] = to_screen(t2);
+
+        // Find bounding box
+        int min_x = std::max(0, std::min({x0, x1, x2}));
+        int max_x = std::min(WIDTH-1, std::max({x0, x1, x2}));
+        int min_y = std::max(0, std::min({y0, y1, y2}));
+        int max_y = std::min(HEIGHT-1, std::max({y0, y1, y2}));
+
+        // Fill bounding box with random color
+        uint32_t color = face_color(fi);
+        for (int y = min_y; y <= max_y; y++) {
+          for (int x = min_x; x <= max_x; x++) {
+            g_buffer[y * WIDTH + x] = color;
+          }
+        }
+      }
+    }  
 // --- World Axes (fixed at origin) ---
     if (show_world_axes) {
       float axis_len = 100.0f;
@@ -562,7 +624,9 @@ mfb_set_char_input_callback(
       mu_checkbox(ctx, "Show Local Axes", &show_local_axes);
       mu_checkbox(ctx, "Show Bounding Box", &show_bounding_box);
       mu_checkbox(ctx, "Show Face Normals", &show_face_normals);
-      mu_checkbox(ctx, "Show Vertex Normals", &show_vertex_normals);
+      mu_checkbox(ctx, "Show Vertex Normals", &show_vertex_normals);\
+      mu_checkbox(ctx, "Show Bounding Boxes", &show_bounding_boxes);
+      mu_checkbox(ctx, "Show Filled Triangles", &show_filled);
       mu_label(ctx, "Local Translation:");
       mu_slider(ctx, &local_translation.x, -500.0f, 500.0f);
       mu_slider(ctx, &local_translation.y, -500.0f, 500.0f);
