@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <algorithm>
+#include <limits>
 
 extern "C" {
 #include "microui.h"
@@ -19,7 +20,8 @@ extern "C" {
 
 #define WIDTH 1000
 #define HEIGHT 700
-
+static int show_zbuffer = 0;
+static float g_zbuffer[WIDTH * HEIGHT];
 static uint32_t g_buffer[WIDTH * HEIGHT];
 static float g_color_phase = 0.0f;
 static float wave_freq = 0.02f;
@@ -305,7 +307,12 @@ mfb_set_char_input_callback(
       } else {
         r = g = b = 40; // flat dark gray when disabled
       }
-      g_buffer[i] = MFB_RGB(r, g, b);
+ g_buffer[i] = MFB_RGB(r, g, b);
+    }
+
+    // Clear Z-buffer every frame
+    for (int i = 0; i < WIDTH * HEIGHT; i++) {
+      g_zbuffer[i] = std::numeric_limits<float>::max();
     }
 
     // Draw all permanent lines (Part 6)
@@ -411,7 +418,7 @@ mfb_set_char_input_callback(
         }
       }
     } 
-    // Part 2: Triangle Filling with Barycentric Coordinates
+// Part 2+3: Triangle Filling with Barycentric Coordinates + Z-Buffer
     if (show_filled) {
       for (int fi = 0; fi < (int)g_mesh_faces.size(); fi++) {
         const Face& face = g_mesh_faces[fi];
@@ -431,19 +438,20 @@ mfb_set_char_input_callback(
         glm::vec4 t1 = apply(v1);
         glm::vec4 t2 = apply(v2);
 
-        // Perspective divide
-        auto to_screen = [&](glm::vec4 v) -> std::pair<int,int> {
-          if (abs(v.w) < 0.0001f) return {0, 0};
+        // Perspective divide - get screen coords AND depth
+        auto to_screen = [&](glm::vec4 v) -> std::tuple<int,int,float> {
+          if (abs(v.w) < 0.0001f) return {0, 0, 0.0f};
           float nx = v.x / v.w;
           float ny = v.y / v.w;
+          float nz = v.z / v.w; // normalized depth
           int sx = (int)((nx + 1.0f) * 0.5f * WIDTH);
           int sy = (int)((1.0f - ny) * 0.5f * HEIGHT);
-          return {sx, sy};
+          return {sx, sy, nz};
         };
 
-        auto [x0, y0] = to_screen(t0);
-        auto [x1, y1] = to_screen(t1);
-        auto [x2, y2] = to_screen(t2);
+        auto [x0, y0, z0] = to_screen(t0);
+        auto [x1, y1, z1] = to_screen(t1);
+        auto [x2, y2, z2] = to_screen(t2);
 
         // Bounding box
         int min_x = std::max(0, std::min({x0, x1, x2}));
@@ -457,26 +465,54 @@ mfb_set_char_input_callback(
         };
 
         float denom = cross2d(x1-x0, y1-y0, x2-x0, y2-y0);
-        if (abs(denom) < 0.0001f) continue; // degenerate triangle
+        if (abs(denom) < 0.0001f) continue;
 
         uint32_t color = face_color(fi);
 
-        // Test each pixel in bounding box
         for (int y = min_y; y <= max_y; y++) {
           for (int x = min_x; x <= max_x; x++) {
-            // Barycentric coordinates
             float alpha = cross2d(x1-x0, y1-y0, x-x0, y-y0) / denom;
             float beta  = cross2d(x2-x1, y2-y1, x-x1, y-y1) / denom;
             float gamma = 1.0f - alpha - beta;
 
-            // If all weights >= 0, pixel is inside triangle
             if (alpha >= 0.0f && beta >= 0.0f && gamma >= 0.0f) {
-              g_buffer[y * WIDTH + x] = color;
+              // Interpolate depth using barycentric coords
+              float depth = alpha * z0 + beta * z1 + gamma * z2;
+
+              // Z-buffer test
+              int idx = y * WIDTH + x;
+              if (depth < g_zbuffer[idx]) {
+                g_zbuffer[idx] = depth;
+                g_buffer[idx] = color;
+              }
             }
           }
         }
       }
-    } 
+    }
+    // Z-buffer visualization
+    if (show_zbuffer) {
+      float min_z = std::numeric_limits<float>::max();
+      float max_z = -std::numeric_limits<float>::max();
+      for (int i = 0; i < WIDTH * HEIGHT; i++) {
+        if (g_zbuffer[i] < std::numeric_limits<float>::max()) {
+          min_z = std::min(min_z, g_zbuffer[i]);
+          max_z = std::max(max_z, g_zbuffer[i]);
+        }
+      }
+      float range = max_z - min_z;
+      if (range > 0.0001f) {
+        for (int i = 0; i < WIDTH * HEIGHT; i++) {
+          if (g_zbuffer[i] < std::numeric_limits<float>::max()) {
+            uint8_t gray = (uint8_t)(255.0f * (1.0f - (g_zbuffer[i] - min_z) / range));
+            g_buffer[i] = MFB_RGB(gray, gray, gray);
+          } else {
+            g_buffer[i] = MFB_RGB(0, 0, 0);
+          }
+        }
+      }
+    }
+
 // --- World Axes (fixed at origin) ---
     if (show_world_axes) {
       float axis_len = 100.0f;
@@ -693,6 +729,7 @@ mfb_set_char_input_callback(
       mu_checkbox(ctx, "Show Vertex Normals", &show_vertex_normals);\
       mu_checkbox(ctx, "Show Bounding Boxes", &show_bounding_boxes);
       mu_checkbox(ctx, "Show Filled Triangles", &show_filled);
+      mu_checkbox(ctx, "Show Z-Buffer", &show_zbuffer);
       mu_label(ctx, "Local Translation:");
       mu_slider(ctx, &local_translation.x, -500.0f, 500.0f);
       mu_slider(ctx, &local_translation.y, -500.0f, 500.0f);
