@@ -410,7 +410,73 @@ mfb_set_char_input_callback(
           }
         }
       }
-    }  
+    } 
+    // Part 2: Triangle Filling with Barycentric Coordinates
+    if (show_filled) {
+      for (int fi = 0; fi < (int)g_mesh_faces.size(); fi++) {
+        const Face& face = g_mesh_faces[fi];
+        Vertex v0 = g_mesh_vertices[face.v0];
+        Vertex v1 = g_mesh_vertices[face.v1];
+        Vertex v2 = g_mesh_vertices[face.v2];
+
+        // Apply normalization + transformation
+        auto apply = [&](Vertex v) -> glm::vec4 {
+          float nx = v.x * norm_transform.scale + norm_transform.translate.x;
+          float ny = v.y * norm_transform.scale + norm_transform.translate.y;
+          float nz = v.z * norm_transform.scale + norm_transform.translate.z;
+          return M_final * glm::vec4(nx, ny, nz, 1.0f);
+        };
+
+        glm::vec4 t0 = apply(v0);
+        glm::vec4 t1 = apply(v1);
+        glm::vec4 t2 = apply(v2);
+
+        // Perspective divide
+        auto to_screen = [&](glm::vec4 v) -> std::pair<int,int> {
+          if (abs(v.w) < 0.0001f) return {0, 0};
+          float nx = v.x / v.w;
+          float ny = v.y / v.w;
+          int sx = (int)((nx + 1.0f) * 0.5f * WIDTH);
+          int sy = (int)((1.0f - ny) * 0.5f * HEIGHT);
+          return {sx, sy};
+        };
+
+        auto [x0, y0] = to_screen(t0);
+        auto [x1, y1] = to_screen(t1);
+        auto [x2, y2] = to_screen(t2);
+
+        // Bounding box
+        int min_x = std::max(0, std::min({x0, x1, x2}));
+        int max_x = std::min(WIDTH-1, std::max({x0, x1, x2}));
+        int min_y = std::max(0, std::min({y0, y1, y2}));
+        int max_y = std::min(HEIGHT-1, std::max({y0, y1, y2}));
+
+        // 2D cross product helper
+        auto cross2d = [](float ax, float ay, float bx, float by) {
+          return ax * by - ay * bx;
+        };
+
+        float denom = cross2d(x1-x0, y1-y0, x2-x0, y2-y0);
+        if (abs(denom) < 0.0001f) continue; // degenerate triangle
+
+        uint32_t color = face_color(fi);
+
+        // Test each pixel in bounding box
+        for (int y = min_y; y <= max_y; y++) {
+          for (int x = min_x; x <= max_x; x++) {
+            // Barycentric coordinates
+            float alpha = cross2d(x1-x0, y1-y0, x-x0, y-y0) / denom;
+            float beta  = cross2d(x2-x1, y2-y1, x-x1, y-y1) / denom;
+            float gamma = 1.0f - alpha - beta;
+
+            // If all weights >= 0, pixel is inside triangle
+            if (alpha >= 0.0f && beta >= 0.0f && gamma >= 0.0f) {
+              g_buffer[y * WIDTH + x] = color;
+            }
+          }
+        }
+      }
+    } 
 // --- World Axes (fixed at origin) ---
     if (show_world_axes) {
       float axis_len = 100.0f;
