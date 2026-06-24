@@ -236,7 +236,7 @@ int main() {
   mu_init(ctx);
 
 load_obj("assets/rocket.obj");
-  norm_transform = compute_normalize_transform(g_mesh_vertices, 600.0f);
+  norm_transform = compute_normalize_transform(g_mesh_vertices, 300.0f);norm_transform = compute_normalize_transform(g_mesh_vertices, 600.0f);
   compute_normals();
  
   printf("Normalize: scale=%.4f, translate=(%.2f, %.2f, %.2f)\n",
@@ -559,7 +559,7 @@ mfb_set_char_input_callback(
         {mn.x,mn.y,mx.z},{mx.x,mn.y,mx.z},
         {mx.x,mx.y,mx.z},{mn.x,mx.y,mx.z}
       };
-      glm::mat4 PVM = P * M_final;
+      glm::mat4 PVM = M_final;
       Point2D cp[8];
       for (int i = 0; i < 8; i++)
         cp[i] = project_point(PVM * glm::vec4(corners[i], 1.0f));
