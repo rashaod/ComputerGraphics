@@ -159,14 +159,22 @@ bool load_obj(const std::string& path) {
     std::string prefix;
     ss >> prefix;
 
-    if (prefix == "v") {
+if (prefix == "v") {
       Vertex v;
       ss >> v.x >> v.y >> v.z;
       g_mesh_vertices.push_back(v);
     } else if (prefix == "f") {
-      int i0, i1, i2;
-      ss >> i0 >> i1 >> i2;
-      g_mesh_faces.push_back({i0 - 1, i1 - 1, i2 - 1});
+      // Parse face - handle v, v/vt, v//vn, v/vt/vn formats
+      std::vector<int> indices;
+      std::string token;
+      while (ss >> token) {
+        int idx = std::stoi(token.substr(0, token.find('/')));
+        indices.push_back(idx - 1);
+      }
+      // Fan triangulation for quads and polygons
+      for (int i = 1; i + 1 < (int)indices.size(); i++) {
+        g_mesh_faces.push_back({indices[0], indices[i], indices[i+1]});
+      }
     }
   }
 
@@ -212,7 +220,7 @@ int main() {
   mu_Context *ctx = (mu_Context *)malloc(sizeof(mu_Context));
   mu_init(ctx);
 
-  load_obj("assets/icosphere.obj");
+load_obj("assets/rocket.obj");
   norm_transform = compute_normalize_transform(g_mesh_vertices, 600.0f);
   compute_normals();
  
