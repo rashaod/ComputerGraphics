@@ -89,15 +89,16 @@ struct Material {
   float shininess;
 };
 static PointLight g_light = {
-  glm::vec3(200.0f, 300.0f, 200.0f),
-  glm::vec3(0.2f, 0.2f, 0.2f),
-  glm::vec3(0.8f, 0.8f, 0.8f),
-  glm::vec3(1.0f, 1.0f, 1.0f)
+  glm::vec3(0.0f, 200.0f, 300.0f),  // position
+  glm::vec3(0.3f, 0.3f, 0.3f),       // ambient
+  glm::vec3(1.0f, 1.0f, 1.0f),       // diffuse
+  glm::vec3(1.0f, 1.0f, 1.0f)        // specular
 };
+
 static Material g_material = {
-  glm::vec3(0.3f, 0.3f, 0.8f),
-  glm::vec3(0.3f, 0.3f, 0.8f),
-  glm::vec3(1.0f, 1.0f, 1.0f),
+  glm::vec3(0.8f, 0.8f, 0.8f),   // ambient - brighter
+  glm::vec3(0.5f, 0.5f, 0.8f),   // diffuse
+  glm::vec3(1.0f, 1.0f, 1.0f),   // specular
   32.0f
 };
 static int use_lighting = 0;
@@ -242,6 +243,7 @@ void compute_normals() {
 
   printf("Computed %d face normals, %d vertex normals\n", nf, nv);
 }
+
 uint32_t face_color(int face_index) {
   // Simple hash to generate consistent random color per face
   int r = (face_index * 73856093) & 0xFF;
@@ -436,16 +438,38 @@ mfb_set_char_input_callback(
         int min_y = std::max(0, std::min({y0, y1, y2}));
         int max_y = std::min(HEIGHT-1, std::max({y0, y1, y2}));
 
-        // Fill bounding box with random color
-        uint32_t color;
+ uint32_t color;
         if (use_lighting) {
-          // Ambient only for now
-          glm::vec3 ambient = g_light.ambient * g_material.ambient;
-          // Clamp to 0-1
-          ambient = glm::clamp(ambient, 0.0f, 1.0f);
-          uint8_t r = (uint8_t)(ambient.r * 255);
-          uint8_t g = (uint8_t)(ambient.g * 255);
-          uint8_t b = (uint8_t)(ambient.b * 255);
+glm::vec3 face_normal = -g_face_normals[fi]; // flip normals
+
+          // Calculate face center in world space (normalized)
+          auto norm_v = [&](int idx) -> glm::vec3 {
+            return glm::vec3(
+              g_mesh_vertices[idx].x * norm_transform.scale + norm_transform.translate.x,
+              g_mesh_vertices[idx].y * norm_transform.scale + norm_transform.translate.y,
+              g_mesh_vertices[idx].z * norm_transform.scale + norm_transform.translate.z
+            );
+          };
+          glm::vec3 center = (norm_v(face.v0) + norm_v(face.v1) + norm_v(face.v2)) / 3.0f;
+
+          // Use directional light instead of point light
+          // (avoids coordinate space mismatch issues)
+          glm::vec3 light_dir = glm::normalize(g_light.position);
+
+          // Ambient component
+         glm::vec3 ambient = g_light.ambient * g_material.ambient * 3.0f;
+
+          // Diffuse component (Lambert's Law)
+          float diff = abs(glm::dot(face_normal, light_dir));
+          glm::vec3 diffuse = diff * g_light.diffuse * g_material.diffuse;
+
+          // Combine
+          glm::vec3 result = ambient + diffuse;
+          result = glm::clamp(result, 0.0f, 1.0f);
+
+          uint8_t r = (uint8_t)(result.r * 255);
+          uint8_t g = (uint8_t)(result.g * 255);
+          uint8_t b = (uint8_t)(result.b * 255);
           color = MFB_RGB(r, g, b);
         } else {
           color = face_color(fi);
