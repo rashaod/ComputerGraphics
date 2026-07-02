@@ -53,6 +53,7 @@ static int show_face_normals = 0;
 static int show_vertex_normals = 0;
 static int show_bounding_boxes = 0;  // Part 1 debug toggle
 static int show_filled = 0;          // Part 2 toggle (we'll use later)
+
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
   int dx = abs(x1 - x0);
   int dy = -abs(y1 - y0);
@@ -74,6 +75,32 @@ void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
 
 struct Vertex { float x, y, z; };
 struct Face { int v0, v1, v2; };
+struct PointLight {
+  glm::vec3 position;
+  glm::vec3 ambient;   // RGB color of ambient component
+  glm::vec3 diffuse;   // RGB color of diffuse component
+  glm::vec3 specular;  // RGB color of specular component
+};
+
+struct Material {
+  glm::vec3 ambient;
+  glm::vec3 diffuse;
+  glm::vec3 specular;
+  float shininess;
+};
+static PointLight g_light = {
+  glm::vec3(200.0f, 300.0f, 200.0f),
+  glm::vec3(0.2f, 0.2f, 0.2f),
+  glm::vec3(0.8f, 0.8f, 0.8f),
+  glm::vec3(1.0f, 1.0f, 1.0f)
+};
+static Material g_material = {
+  glm::vec3(0.3f, 0.3f, 0.8f),
+  glm::vec3(0.3f, 0.3f, 0.8f),
+  glm::vec3(1.0f, 1.0f, 1.0f),
+  32.0f
+};
+static int use_lighting = 0;
 
 std::vector<Vertex> g_mesh_vertices;
 struct Transform {
@@ -410,7 +437,19 @@ mfb_set_char_input_callback(
         int max_y = std::min(HEIGHT-1, std::max({y0, y1, y2}));
 
         // Fill bounding box with random color
-        uint32_t color = face_color(fi);
+        uint32_t color;
+        if (use_lighting) {
+          // Ambient only for now
+          glm::vec3 ambient = g_light.ambient * g_material.ambient;
+          // Clamp to 0-1
+          ambient = glm::clamp(ambient, 0.0f, 1.0f);
+          uint8_t r = (uint8_t)(ambient.r * 255);
+          uint8_t g = (uint8_t)(ambient.g * 255);
+          uint8_t b = (uint8_t)(ambient.b * 255);
+          color = MFB_RGB(r, g, b);
+        } else {
+          color = face_color(fi);
+        }
         for (int y = min_y; y <= max_y; y++) {
           for (int x = min_x; x <= max_x; x++) {
             g_buffer[y * WIDTH + x] = color;
@@ -467,7 +506,19 @@ mfb_set_char_input_callback(
         float denom = cross2d(x1-x0, y1-y0, x2-x0, y2-y0);
         if (abs(denom) < 0.0001f) continue;
 
-        uint32_t color = face_color(fi);
+        uint32_t color;
+        if (use_lighting) {
+          // Ambient only for now
+          glm::vec3 ambient = g_light.ambient * g_material.ambient;
+          // Clamp to 0-1
+          ambient = glm::clamp(ambient, 0.0f, 1.0f);
+          uint8_t r = (uint8_t)(ambient.r * 255);
+          uint8_t g = (uint8_t)(ambient.g * 255);
+          uint8_t b = (uint8_t)(ambient.b * 255);
+          color = MFB_RGB(r, g, b);
+        } else {
+          color = face_color(fi);
+        }
 
         for (int y = min_y; y <= max_y; y++) {
           for (int x = min_x; x <= max_x; x++) {
@@ -781,6 +832,32 @@ mfb_set_char_input_callback(
       mu_label(ctx, "Field of View:");
       mu_slider(ctx, &fov, 10.0f, 120.0f);
       mu_checkbox(ctx, "Perspective (off=Ortho)", &use_perspective);
+      mu_end_window(ctx);
+    }
+    // --- Lighting Controls ---
+    if (mu_begin_window(ctx, "Lighting Controls", mu_rect(700, 20, 280, 400))) {
+      int w[] = {-1};
+      mu_layout_row(ctx, 1, w, 0);
+      mu_checkbox(ctx, "Enable Lighting", &use_lighting);
+
+      mu_label(ctx, "Light Position:");
+      mu_slider(ctx, &g_light.position.x, -1000.0f, 1000.0f);
+      mu_slider(ctx, &g_light.position.y, -1000.0f, 1000.0f);
+      mu_slider(ctx, &g_light.position.z, -1000.0f, 1000.0f);
+
+      mu_label(ctx, "Ambient Intensity:");
+      mu_slider(ctx, &g_light.ambient.r, 0.0f, 1.0f);
+      mu_slider(ctx, &g_light.ambient.g, 0.0f, 1.0f);
+      mu_slider(ctx, &g_light.ambient.b, 0.0f, 1.0f);
+
+      mu_label(ctx, "Diffuse Intensity:");
+      mu_slider(ctx, &g_light.diffuse.r, 0.0f, 1.0f);
+      mu_slider(ctx, &g_light.diffuse.g, 0.0f, 1.0f);
+      mu_slider(ctx, &g_light.diffuse.b, 0.0f, 1.0f);
+
+      mu_label(ctx, "Material Shininess:");
+      mu_slider(ctx, &g_material.shininess, 1.0f, 128.0f);
+
       mu_end_window(ctx);
     }
     
