@@ -44,7 +44,7 @@ static int g_drag_start_x = 0, g_drag_start_y = 0;
 static int show_world_axes = 1;
 static int show_local_axes = 1;
 static int show_bounding_box = 1;
-static glm::vec3 cam_position(0.0f, 0.0f, 500.0f);
+static glm::vec3 cam_position(0.0f, -50.0f, 500.0f);
 static glm::vec3 cam_rotation(0.0f, 0.0f, 0.0f);
 static float draw_r = 255.0f, draw_g = 255.0f, draw_b = 255.0f;
 static std::vector<glm::vec3> g_face_normals;
@@ -96,8 +96,8 @@ static PointLight g_light = {
 };
 
 static Material g_material = {
-  glm::vec3(0.8f, 0.8f, 0.8f),   // ambient - brighter
-  glm::vec3(0.5f, 0.5f, 0.8f),   // diffuse
+  glm::vec3(0.8f, 0.8f, 0.8f),   // ambient
+  glm::vec3(1.0f, 1.0f, 1.0f),   // diffuse - white
   glm::vec3(1.0f, 1.0f, 1.0f),   // specular
   32.0f
 };
@@ -265,7 +265,7 @@ int main() {
   mu_init(ctx);
 
 load_obj("assets/rocket.obj");
-  norm_transform = compute_normalize_transform(g_mesh_vertices, 300.0f);norm_transform = compute_normalize_transform(g_mesh_vertices, 600.0f);
+norm_transform = compute_normalize_transform(g_mesh_vertices, 200.0f);
   compute_normals();
  
   printf("Normalize: scale=%.4f, translate=(%.2f, %.2f, %.2f)\n",
@@ -329,14 +329,14 @@ mfb_set_char_input_callback(
       int x = i % WIDTH;
       int y = i / WIDTH;
       uint8_t r, g, b;
-      if (waves_enabled) {
+      if (waves_enabled && !use_lighting) {
         r = (uint8_t)(128 + 127 * sinf((x + y) * wave_freq + g_color_phase));
         g = (uint8_t)(128 + 127 * sinf((x - y) * wave_freq + g_color_phase));
         b = 100;
       } else {
-        r = g = b = 40; // flat dark gray when disabled
+        r = g = b = 40; // flat dark gray
       }
- g_buffer[i] = MFB_RGB(r, g, b);
+      g_buffer[i] = MFB_RGB(r, g, b);
     }
 
     // Clear Z-buffer every frame
@@ -438,33 +438,23 @@ mfb_set_char_input_callback(
         int min_y = std::max(0, std::min({y0, y1, y2}));
         int max_y = std::min(HEIGHT-1, std::max({y0, y1, y2}));
 
- uint32_t color;
+uint32_t color;
         if (use_lighting) {
-glm::vec3 face_normal = -g_face_normals[fi]; // flip normals
+          // Get face normal transformed by model matrix
+          glm::mat3 normal_matrix = glm::mat3(M_world * M_local);
+          glm::vec3 face_normal = glm::normalize(normal_matrix * g_face_normals[fi]);
 
-          // Calculate face center in world space (normalized)
-          auto norm_v = [&](int idx) -> glm::vec3 {
-            return glm::vec3(
-              g_mesh_vertices[idx].x * norm_transform.scale + norm_transform.translate.x,
-              g_mesh_vertices[idx].y * norm_transform.scale + norm_transform.translate.y,
-              g_mesh_vertices[idx].z * norm_transform.scale + norm_transform.translate.z
-            );
-          };
-          glm::vec3 center = (norm_v(face.v0) + norm_v(face.v1) + norm_v(face.v2)) / 3.0f;
+          // Simple shading: use absolute Y component as brightness
+          // (faces pointing up = bright, faces pointing sideways = medium)
+         // Use the largest normal component for brightness
+          float brightness = 0.3f + 0.7f * std::max({
+            abs(face_normal.x),
+            abs(face_normal.y), 
+            abs(face_normal.z)
+          });
 
-          // Use directional light instead of point light
-          // (avoids coordinate space mismatch issues)
-          glm::vec3 light_dir = glm::normalize(g_light.position);
-
-          // Ambient component
-         glm::vec3 ambient = g_light.ambient * g_material.ambient * 3.0f;
-
-          // Diffuse component (Lambert's Law)
-          float diff = abs(glm::dot(face_normal, light_dir));
-          glm::vec3 diffuse = diff * g_light.diffuse * g_material.diffuse;
-
-          // Combine
-          glm::vec3 result = ambient + diffuse;
+          // Apply material color with brightness
+        glm::vec3 result = glm::vec3(0.9f, 0.5f, 0.2f) * brightness + glm::vec3(0.2f, 0.1f, 0.05f);
           result = glm::clamp(result, 0.0f, 1.0f);
 
           uint8_t r = (uint8_t)(result.r * 255);
@@ -472,8 +462,7 @@ glm::vec3 face_normal = -g_face_normals[fi]; // flip normals
           uint8_t b = (uint8_t)(result.b * 255);
           color = MFB_RGB(r, g, b);
         } else {
-          color = face_color(fi);
-        }
+          color = face_color(fi);}
         for (int y = min_y; y <= max_y; y++) {
           for (int x = min_x; x <= max_x; x++) {
             g_buffer[y * WIDTH + x] = color;
@@ -530,20 +519,30 @@ glm::vec3 face_normal = -g_face_normals[fi]; // flip normals
         float denom = cross2d(x1-x0, y1-y0, x2-x0, y2-y0);
         if (abs(denom) < 0.0001f) continue;
 
-        uint32_t color;
+uint32_t color;
         if (use_lighting) {
-          // Ambient only for now
-          glm::vec3 ambient = g_light.ambient * g_material.ambient;
-          // Clamp to 0-1
-          ambient = glm::clamp(ambient, 0.0f, 1.0f);
-          uint8_t r = (uint8_t)(ambient.r * 255);
-          uint8_t g = (uint8_t)(ambient.g * 255);
-          uint8_t b = (uint8_t)(ambient.b * 255);
-          color = MFB_RGB(r, g, b);
+          // Transform normal to view space
+          glm::mat3 normal_mat = glm::mat3(V * glm::mat4(glm::mat3(M_world * M_local)));
+          glm::vec3 n = glm::normalize(normal_mat * g_face_normals[fi]);
+          
+          // Light direction in view space (fixed above-front)
+          glm::vec3 light_dir = glm::normalize(glm::vec3(0.3f, 0.8f, 0.5f));
+          
+          // Lambert diffuse
+          float diff = std::max(0.0f, glm::dot(n, light_dir));
+          // Use abs to also light back faces
+          diff = std::max(diff, std::max(0.0f, glm::dot(-n, light_dir)) * 0.5f);
+          
+          // Ambient + diffuse
+          float ambient = 0.3f;
+          float brightness = ambient + (1.0f - ambient) * diff;
+          
+          glm::vec3 result = glm::vec3(0.7f, 0.5f, 0.3f) * brightness;
+          result = glm::clamp(result, 0.0f, 1.0f);
+          color = MFB_RGB((uint8_t)(result.r*255), (uint8_t)(result.g*255), (uint8_t)(result.b*255));
         } else {
           color = face_color(fi);
         }
-
         for (int y = min_y; y <= max_y; y++) {
           for (int x = min_x; x <= max_x; x++) {
             float alpha = cross2d(x1-x0, y1-y0, x-x0, y-y0) / denom;
