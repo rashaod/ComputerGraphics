@@ -58,3 +58,111 @@ Finally, write a visualization mode: Map the raw floating-point values in your Z
 * **Background:** When drawing adjacent triangles that share an edge, floating-point rounding errors often cause pixels exactly on the edge to either be drawn twice, or not at all (creating tiny gaps or "seams" in your model). Modern GPUs solve this using strict Top-Left Fill Rules.
 
 * **Task:** Research the Top-Left Fill Rule (or tie-breaking rules for Barycentric coordinates). Implement edge-tie-breaking in your rasterizer so that shared edges are completely seamless and no pixel is ever drawn twice.
+
+# Submission Report
+
+## Part 1: Bounding Box Rasterization
+
+### Approach
+For each triangle in the mesh, I compute the 2D bounding box of its three projected screen-space vertices (min/max X and Y), then fill every pixel inside that rectangle with a unique color per triangle:
+
+```cpp
+// Find bounding box
+int min_x = std::max(0, std::min({x0, x1, x2}));
+int max_x = std::min(WIDTH-1, std::max({x0, x1, x2}));
+int min_y = std::max(0, std::min({y0, y1, y2}));
+int max_y = std::min(HEIGHT-1, std::max({y0, y1, y2}));
+
+// Fill bounding box with random color per face
+uint32_t color = face_color(fi);
+for (int y = min_y; y <= max_y; y++) {
+  for (int x = min_x; x <= max_x; x++) {
+    g_buffer[y * WIDTH + x] = color;
+  }
+}
+```
+
+Each triangle gets a consistent unique color via a hash function:
+
+```cpp
+uint32_t face_color(int face_index) {
+  int r = (face_index * 73856093) & 0xFF;
+  int g = (face_index * 19349663) & 0xFF;
+  int b = (face_index * 83492791) & 0xFF;
+  return MFB_RGB(std::max(r, 50), std::max(g, 50), std::max(b, 50));
+}
+```
+
+### What This Shows
+The bounding box view clearly demonstrates **why a proper triangle inclusion test is needed** — every pixel inside the rectangular bounding box gets colored, even pixels that fall outside the actual triangle. The overlapping rectangles produce a blocky, abstract representation of the mesh that does not respect true triangle boundaries.
+
+### Result
+![Part 1 — Bounding box debug view disabled](../nanorender/assets/hw4_step1.png)
+![Part 1 — Bounding box debug view enabled: colorful rectangles per triangle](../nanorender/assets/hw4_step11.png)
+![Part 1 — Bounding box close-up](../nanorender/assets/hw4_Step12.png)
+
+---
+
+## Part 2: Triangle Filling with Barycentric Coordinates
+
+### Approach
+For every pixel inside a triangle's bounding box, I compute barycentric coordinates (α, β, γ) to test whether the pixel actually lies inside the triangle. Only pixels where all three coordinates are non-negative get colored:
+
+```cpp
+auto cross2d = [](float ax, float ay, float bx, float by) {
+  return ax * by - ay * bx;
+};
+
+float denom = cross2d(x1-x0, y1-y0, x2-x0, y2-y0);
+if (abs(denom) < 0.0001f) continue; // skip degenerate triangles
+
+for (int y = min_y; y <= max_y; y++) {
+  for (int x = min_x; x <= max_x; x++) {
+    float alpha = cross2d(x1-x0, y1-y0, x-x0, y-y0) / denom;
+    float beta  = cross2d(x2-x1, y2-y1, x-x1, y-y1) / denom;
+    float gamma = 1.0f - alpha - beta;
+
+    if (alpha >= 0.0f && beta >= 0.0f && gamma >= 0.0f) {
+      g_buffer[y * WIDTH + x] = color;
+    }
+  }
+}
+```
+
+### What This Shows
+Compared to Part 1, the triangles are now filled with pixel-perfect accuracy — no rectangular artifacts. However, without a depth test, triangles drawn later simply overwrite earlier ones regardless of their actual depth in 3D space, creating visible ordering artifacts (some triangles appear in front of others incorrectly).
+
+---
+
+## Part 3: Z-Buffer Depth Testing
+
+### Approach
+I added a second buffer `g_zbuffer` (same dimensions as `g_buffer`) initialized to `FLT_MAX` each frame. Before writing any pixel, I interpolate the depth value using barycentric coordinates and compare it against the stored depth:
+
+```cpp
+// Interpolate depth
+float depth = alpha * z0 + beta * z1 + gamma * z2;
+
+// Z-buffer test: only draw if closer than what's already there
+int idx = y * WIDTH + x;
+if (depth < g_zbuffer[idx]) {
+  g_zbuffer[idx] = depth;
+  g_buffer[idx] = color;
+}
+```
+
+### Z-Buffer Visualization
+I also implemented a grayscale depth map visualization — the stored Z values are normalized across the full depth range and mapped to brightness (closer = brighter, further = darker):
+
+```cpp
+uint8_t gray = (uint8_t)(255.0f * (1.0f - (g_zbuffer[i] - min_z) / range));
+g_buffer[i] = MFB_RGB(gray, gray, gray);
+```
+
+### What This Shows
+With the Z-buffer enabled, triangles are correctly ordered by depth — closer triangles always appear in front of further ones regardless of draw order. The depth map visualization clearly shows the 3D structure of the scene, with the rocket appearing as a brighter (closer) region against the darker (further) ground plane.
+
+### Result
+![Part 3 — Filled triangles with Z-buffer depth testing](../nanorender/assets/hw4_step31.png)
+![Part 3 — Grayscale Z-buffer depth map visualization](../nanorender/assets/hw4_step32.png)
+![Part 3 — Wireframe reference view](../nanorender/assets/hw4_step33.png)
