@@ -82,3 +82,140 @@ Render the result. Your jagged, low-poly model should now look incredibly smooth
 * **Background:** Instead of assigning a solid color material to an object, we can wrap a 2D image (texture) around it. This requires reading $U, V$ texture coordinates assigned to each vertex.
 
 * **Task:** Extend your `.obj` loader to read `vt` (texture coordinate) data. Load a simple `.bmp` or `.png` file into a 1D pixel array in memory. During rasterization, use your barycentric coordinates to interpolate the $U, V$ values at the current pixel. Use these $U, V$ values to look up the exact color from the texture array and apply it to the Diffuse component of your lighting equation.
+
+# Submission Report
+
+## Part 1: Light Sources and Material Properties (Ambient Lighting)
+
+### Approach
+I defined two new structs — `PointLight` and `Material` — to hold the lighting and material properties:
+
+```cpp
+struct PointLight {
+  glm::vec3 position;
+  glm::vec3 ambient;
+  glm::vec3 diffuse;
+  glm::vec3 specular;
+};
+
+struct Material {
+  glm::vec3 ambient;
+  glm::vec3 diffuse;
+  glm::vec3 specular;
+  float shininess;
+};
+```
+
+I added a **Lighting Controls** UI window with sliders for light position, ambient intensity, diffuse intensity, and material shininess. For Part 1, only the ambient component is applied:
+
+```cpp
+glm::vec3 ambient = g_light.ambient * g_material.ambient;
+glm::vec3 result = glm::clamp(ambient, 0.0f, 1.0f);
+color = MFB_RGB((uint8_t)(result.r*255), (uint8_t)(result.g*255), (uint8_t)(result.b*255));
+```
+
+The ambient component represents light that bounces uniformly from all directions — it ensures no part of the model is completely black even when facing away from the light source. Adjusting the ambient intensity sliders changes the flat base color of the entire model uniformly.
+
+### Result
+![Part 1 — Ambient lighting producing a flat uniform color](../nanorender/assets/hw5_part1.png)
+
+---
+
+## Part 2: Flat Shading with Diffuse Lighting
+
+### Approach
+I added **Lambert diffuse lighting** — computed once per triangle using the face normal. The diffuse component models how much light hits a surface based on the angle between the surface normal and the light direction:
+
+```cpp
+// Transform normal to view space
+glm::mat3 normal_mat = glm::mat3(V * glm::mat4(glm::mat3(M_world * M_local)));
+glm::vec3 n = glm::normalize(normal_mat * g_face_normals[fi]);
+
+// Fixed directional light
+glm::vec3 light_dir = glm::normalize(glm::vec3(0.3f, 0.8f, 0.5f));
+
+// Lambert diffuse (abs to light both front and back faces)
+float diff = std::max(0.0f, glm::dot(n, light_dir));
+diff = std::max(diff, std::max(0.0f, glm::dot(-n, light_dir)) * 0.5f);
+
+float ambient = 0.2f;
+float brightness = ambient + (1.0f - ambient) * diff;
+glm::vec3 result = glm::vec3(0.7f, 0.5f, 0.3f) * brightness;
+```
+
+Since one lighting value is computed per **triangle** (using the face normal), each triangle renders as a single flat color. This produces the characteristic **faceted/low-poly look** of flat shading — visible triangle boundaries with sharp color jumps between adjacent faces.
+
+### Result
+![Part 2 — Flat shading: each triangle has one uniform color based on its face normal](../nanorender/assets/hw5_part2.png)
+
+---
+
+## Part 3: Specular Highlights
+
+### Approach
+I added a **Phong specular component** on top of the diffuse lighting. Specular highlights simulate the bright shiny spot that appears when light reflects directly toward the camera:
+
+```cpp
+// View direction (camera looks down -Z in view space)
+glm::vec3 view_dir = glm::vec3(0.0f, 0.0f, 1.0f);
+
+// Reflect light direction around surface normal
+glm::vec3 reflect_dir = glm::reflect(-light_dir, n);
+
+// Specular intensity: dot product raised to shininess power
+float spec = pow(std::max(0.0f, glm::dot(reflect_dir, view_dir)),
+                 g_material.shininess);
+
+// Combine ambient + diffuse + specular
+glm::vec3 result = base_color * (ambient + diff * 0.7f)
+                 + glm::vec3(1.0f, 1.0f, 1.0f) * spec * 0.8f;
+```
+
+The **shininess exponent** controls the size and sharpness of the highlight:
+- **Low shininess (1–10):** Large, soft, spread-out highlight — simulates a rough/matte surface
+- **High shininess (64–128):** Small, tight, bright spot — simulates a polished/glossy surface
+
+The specular highlight color is white regardless of material color — this simulates the light color dominating at the point of direct reflection.
+
+### Result
+![Part 3 — Low shininess (1.0): large soft highlight covering most of the surface](../nanorender/assets/hw5_part31.png)
+![Part 3 — High shininess (128.0): small tight highlight on a darker surface](../nanorender/assets/hw5_part32.png)
+
+---
+
+## Part 4: Phong Shading (Per-Pixel Smooth Lighting)
+
+### Approach
+In Parts 2 and 3, lighting was computed once per triangle using the face normal — producing flat, faceted shading. **Phong shading** moves the lighting computation **inside the pixel loop**, interpolating vertex normals across each triangle using barycentric coordinates:
+
+```cpp
+// Get transformed vertex normals
+glm::mat3 normal_mat = glm::mat3(V * glm::mat4(glm::mat3(M_world * M_local)));
+glm::vec3 vn0 = glm::normalize(normal_mat * g_vertex_normals[face.v0]);
+glm::vec3 vn1 = glm::normalize(normal_mat * g_vertex_normals[face.v1]);
+glm::vec3 vn2 = glm::normalize(normal_mat * g_vertex_normals[face.v2]);
+
+// Per-pixel: interpolate normal using barycentric coordinates
+glm::vec3 n = glm::normalize(alpha * vn0 + beta * vn1 + gamma * vn2);
+
+// Compute full lighting (ambient + diffuse + specular) per pixel
+float diff = std::max(0.0f, glm::dot(n, light_dir));
+glm::vec3 reflect_dir = glm::reflect(-light_dir, n);
+float spec = pow(std::max(0.0f, glm::dot(reflect_dir, view_dir)),
+                 g_material.shininess);
+glm::vec3 result = base_color * (ambient + diff * 0.7f)
+                 + glm::vec3(1.0f, 1.0f, 1.0f) * spec * 0.8f;
+```
+
+### Flat Shading vs Phong Shading
+| | Flat Shading | Phong Shading |
+|---|---|---|
+| Normal used | One face normal per triangle | Interpolated vertex normal per pixel |
+| Color per triangle | One flat color | Varies smoothly across triangle |
+| Visual result | Faceted, sharp triangle edges visible | Smooth, rounded appearance |
+| Performance | Fast (one lighting calc per triangle) | Slower (one lighting calc per pixel) |
+
+The key insight is that vertex normals (averaged from adjacent face normals) represent the smooth underlying surface geometry. By interpolating them across each triangle, we can approximate smooth curved surfaces even with a coarse triangle mesh.
+
+### Result
+![Part 4 — Phong shading: smooth per-pixel lighting with gradual transitions across triangle boundaries](../nanorender/assets/hw5_part4.png)
