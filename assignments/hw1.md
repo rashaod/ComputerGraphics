@@ -133,198 +133,196 @@ Design an interface and visual result that you are proud of!
 
 ##### 3. Anti-Aliasing: Xiaolin Wu's Algorithm
 *   **Background:** Bresenham's algorithm produces "aliased" (jagged) lines. Xiaolin Wu's line algorithm solves this by drawing pairs of pixels that straddle the mathematical line, distributing the color intensity based on the exact fractional distance to the line's true center. 
-*   **Task:** Implement Xiaolin Wu's line algorithm. Because our assignment ignores the alpha channel (as established in Part 1). Note what happens when you draw a line on top of another line and attempt to fix the issue. Finally, add a UI toggle to instantly switch between Bresenham and Xiaolin Wu modes to visually compare the results.- - -  
-  
- #   S u b m i s s i o n   R e p o r t   Ò¬    A s s i g n m e n t   1 :   B a s i c   G r a p h i c s   a n d   I m m e d i a t e   M o d e   G U I  
-  
- # #   P a r t   1 :   M a n i p u l a t i n g   t h e   F r a m e b u f f e r  
-  
- # # #   A p p r o a c h  
- I   m o d i f i e d   t h e   b a c k g r o u n d   r e n d e r i n g   l o o p   i n   ` m a i n . c p p `   t o   g e n e r a t e   a   * * d i a g o n a l   w a v e   i n t e r f e r e n c e   p a t t e r n * *   i n s t e a d   o f   t h e   o r i g i n a l   l i n e a r   g r a d i e n t .   T h e   o r i g i n a l   c o d e   u s e d   ` x `   f o r   r e d   a n d   ` y `   f o r   g r e e n   i n d e p e n d e n t l y   Ò¬    p r o d u c i n g   a   s i m p l e   t w o - a x i s   g r a d i e n t   w i t h   n o   r e a l   2 D   i n t e r a c t i o n   b e t w e e n   t h e   a x e s .  
-  
- M y   i m p l e m e n t a t i o n   c o m b i n e s   ` x `   a n d   ` y `   t o g e t h e r   u s i n g   ` s i n f ( ) ` :  
-  
- ` ` ` c p p  
- u i n t 8 _ t   r   =   ( u i n t 8 _ t ) ( 1 2 8   +   1 2 7   *   s i n f ( ( x   +   y )   *   w a v e _ f r e q   +   g _ c o l o r _ p h a s e ) ) ;  
- u i n t 8 _ t   g   =   ( u i n t 8 _ t ) ( 1 2 8   +   1 2 7   *   s i n f ( ( x   -   y )   *   w a v e _ f r e q   +   g _ c o l o r _ p h a s e ) ) ;  
- u i n t 8 _ t   b   =   1 0 0 ;  
- ` ` `  
-  
- -   T h e   * * r e d   c h a n n e l * *   o s c i l l a t e s   a l o n g   ` x   +   y `   Ò¬    d i a g o n a l   b a n d s   g o i n g   t o p - l e f t   t o   b o t t o m - r i g h t .  
- -   T h e   * * g r e e n   c h a n n e l * *   o s c i l l a t e s   a l o n g   ` x   -   y `   Ò¬    d i a g o n a l   b a n d s   g o i n g   t h e   o p p o s i t e   d i r e c t i o n .  
- -   S i n c e   ` s i n f ( ) `   o u t p u t s   v a l u e s   b e t w e e n   - 1   a n d   1 ,   I   s c a l e d   b y   1 2 7   a n d   s h i f t e d   b y   1 2 8   t o   k e e p   a l l   v a l u e s   i n   t h e   v a l i d   0 Ò¬  2 5 5   b y t e   r a n g e .  
- -   T h e   t w o   c r o s s i n g   d i a g o n a l   w a v e   p a t t e r n s   i n t e r f e r e   w i t h   e a c h   o t h e r ,   c r e a t i n g   a   c r o s s h a t c h - s t y l e   c o l o r   s h i m m e r   a c r o s s   t h e   s c r e e n .  
-  
- # # #   R e s u l t  
- ! [ P a r t   1   Ò¬    D i a g o n a l   W a v e   P a t t e r n ] ( . . / n a n o r e n d e r / a s s e t s / h w 1 _ s t e p 1 d e f . p n g )  
-  
- - - -  
-  
- # #   P a r t   2 :   I m m e d i a t e   M o d e   U I   D e c l a r a t i o n  
-  
- # # #   A p p r o a c h  
- I   a d d e d   a   n e w   c h e c k b o x   w i d g e t   b o u n d   t o   a   ` s t a t i c   i n t   s h o w _ s e c r e t `   v a r i a b l e .   B e l o w   i t ,   a   l a b e l   i s   r e c a l c u l a t e d   e v e r y   f r a m e   b a s e d   o n   t h e   c h e c k b o x ' s   c u r r e n t   v a l u e :  
-  
- ` ` ` c p p  
- m u _ c h e c k b o x ( c t x ,   " T o g g l e   s e c r e t   m e s s a g e " ,   & s h o w _ s e c r e t ) ;  
- i f   ( s h o w _ s e c r e t )   {  
-     m u _ l a b e l ( c t x ,   " Y o u   f o u n d   t h e   s e c r e t   m e s s a g e ! " ) ;  
- }   e l s e   {  
-     m u _ l a b e l ( c t x ,   " C h e c k   t h e   b o x   a b o v e . . . " ) ;  
- }  
- ` ` `  
-  
- # # #   I m m e d i a t e   M o d e   D e m o n s t r a t i o n  
- T h i s   i l l u s t r a t e s   t h e   c o r e   I m m e d i a t e   M o d e   p r i n c i p l e :   t h e   c h e c k b o x   h a s   n o   i n t e r n a l   m e m o r y   o f   i t s   o w n .   E a c h   f r a m e ,   ` m u _ c h e c k b o x `   d i r e c t l y   m u t a t e s   ` s h o w _ s e c r e t `   t h r o u g h   t h e   p o i n t e r   p a s s e d   t o   i t ,   a n d   t h e   l a b e l   c o n t e n t   i s   f r e s h l y   d e c i d e d   b y   t h e   ` i f `   s t a t e m e n t   e v e r y   s i n g l e   f r a m e .   T h e r e   i s   n o   p e r s i s t e n t   " L a b e l   o b j e c t "   b e i n g   u p d a t e d   Ò¬    t h e   e n t i r e   U I   t r e e   i s   r e b u i l t   f r o m   s c r a t c h   e a c h   f r a m e .  
-  
- # # #   R e s u l t  
- ! [ P a r t   2   Ò¬    T o g g l e   C h e c k b o x ] ( . . / n a n o r e n d e r / a s s e t s / f i r s t S t e p . p n g )  
-  
- - - -  
-  
- # #   P a r t   3 :   T h e   R e a l - T i m e   G r a p h i c s   L o o p   a n d   I n p u t   H a n d l i n g  
-  
- # # #   A p p r o a c h  
- I   a d d e d   a   g l o b a l   s t a t e   v a r i a b l e   ` g _ c o l o r _ p h a s e `   a n d   m o d i f i e d   t h e   c h a r a c t e r   i n p u t   c a l l b a c k   s o   t h a t   p r e s s i n g   ` c `   s h i f t s   t h e   c o l o r   p h a s e   o f   t h e   b a c k g r o u n d   w a v e   p a t t e r n :  
-  
- ` ` ` c p p  
- m f b _ s e t _ c h a r _ i n p u t _ c a l l b a c k (  
-     [ ] ( s t r u c t   m f b _ w i n d o w   * w ,   u n s i g n e d   i n t   c )   {  
-         i f   ( c   = =   ' c ' )   {  
-             g _ c o l o r _ p h a s e   + =   2 . 0 f ;  
-             r e t u r n ;   / /   c o n s u m e   t h e   e v e n t  
-         }  
-         e x t e r n   v o i d   u i _ b r i d g e _ c h a r _ i n p u t ( s t r u c t   m f b _ w i n d o w   * ,   u n s i g n e d   i n t ) ;  
-         u i _ b r i d g e _ c h a r _ i n p u t ( w ,   c ) ;  
-     } ,  
-     w i n d o w ) ;  
- ` ` `  
-  
- ` g _ c o l o r _ p h a s e `   i s   a d d e d   i n t o   t h e   ` s i n f ( ) `   c a l c u l a t i o n s   i n   t h e   b a c k g r o u n d   l o o p ,   s o   e a c h   p r e s s   o f   ` c `   v i s i b l y   s h i f t s   t h e   w a v e   p a t t e r n ' s   c o l o r s .  
-  
- # # #   E v e n t   C o n s u m p t i o n  
- N o t e   t h e   ` r e t u r n ; `   a f t e r   h a n d l i n g   ` ' c ' ` .   T h i s   * * c o n s u m e s * *   t h e   e v e n t   Ò¬    t h e   k e y s t r o k e   n e v e r   r e a c h e s   ` u i _ b r i d g e _ c h a r _ i n p u t ` ,   s o   i t   w o n ' t   b e   t y p e d   i n t o   a n y   f o c u s e d   t e x t b o x .   H a d   I   o m i t t e d   t h e   ` r e t u r n ` ,   t h e   c h a r a c t e r   ` ' c ' `   w o u l d   f a l l   t h r o u g h   t o   t h e   U I   b r i d g e   a n d   b e   t y p e d   i n t o   a n y   f o c u s e d   t e x t b o x .   I   c h o s e   t o   c o n s u m e   i t   h e r e   b e c a u s e   ` c `   i s   m e a n t   a s   a   g l o b a l   a p p l i c a t i o n   s h o r t c u t ,   n o t   a   p r i n t a b l e   c h a r a c t e r .  
-  
- # # #   R e s u l t  
- ! [ P a r t   3   Ò¬    C o l o r   P h a s e   S h i f t ] ( . . / n a n o r e n d e r / a s s e t s / s e c o n d S t e p . p n g )  
-  
- - - -  
-  
- # #   P a r t   4 :   U I   A r c h i t e c t u r e   a n d   t h e   R e n d e r e r   B r i d g e  
-  
- # # #   A p p r o a c h  
- I n   ` u i _ r e n d e r e r . c p p ` ,   I   m o d i f i e d   ` d r a w _ r e c t `   t o   a p p l y   a   v i s u a l   p i x e l   o f f s e t   w h e n   w r i t i n g   t o   ` m _ b u f f e r ` ,   w i t h o u t   c h a n g i n g   t h e   l o g i c a l   r e c t   c o o r d i n a t e s   u s e d   f o r   l a y o u t   a n d   h i t - t e s t i n g :  
-  
- ` ` ` c p p  
- i n t   s h i f t _ x   =   1 0 0 ;  
- i n t   s h i f t _ y   =   8 0 ;  
-  
- f o r   ( i n t   y   =   y 1 ;   y   <   y 2 ;   y + + )   {  
-         f o r   ( i n t   x   =   x 1 ;   x   <   x 2 ;   x + + )   {  
-                 i n t   d x   =   x   +   s h i f t _ x ;  
-                 i n t   d y   =   y   +   s h i f t _ y ;  
-                 i f   ( d x   > =   0   & &   d x   <   m _ w i d t h   & &   d y   > =   0   & &   d y   <   m _ h e i g h t )   {  
-                         m _ b u f f e r [ d y   *   m _ w i d t h   +   d x ]   =   c ;  
-                 }  
-         }  
- }  
- ` ` `  
-  
- T h i s   c h a n g e   w a s   r e v e r t e d   a f t e r   t h e   e x p e r i m e n t   s o   t h e   U I   r e m a i n e d   u s a b l e   f o r   t h e   r e s t   o f   t h e   a s s i g n m e n t .  
-  
- # # #   R e s u l t   a n d   E x p l a n a t i o n  
- A f t e r   a p p l y i n g   t h e   o f f s e t ,   a l l   b u t t o n / w i n d o w   b a c k g r o u n d   r e c t a n g l e s   v i s u a l l y   s h i f t e d   1 0 0 p x   r i g h t   a n d   8 0 p x   d o w n .   H o w e v e r ,   ` d r a w _ t e x t `   w a s   l e f t   u n m o d i f i e d ,   s o   t e x t   l a b e l s   r e m a i n e d   a t   t h e i r   o r i g i n a l   p o s i t i o n s .  
-  
- * * K e y   f i n d i n g : * *   C l i c k i n g   d i r e c t l y   o n   t h e   v i s i b l e   " Q u i t "   t e x t   s u c c e s s f u l l y   t r i g g e r e d   t h e   q u i t   a c t i o n ,   w h i l e   c l i c k i n g   o n   t h e   v i s i b l y   s h i f t e d   g r a y   r e c t a n g l e   b a c k g r o u n d   d i d   n o t h i n g .  
-  
- T h i s   h a p p e n s   b e c a u s e   M i c r o U I ' s   i n p u t   h i t - t e s t i n g   a l w a y s   o p e r a t e s   o n   t h e   * o r i g i n a l *   r e c t   c o o r d i n a t e s   p a s s e d   i n t o   t h e   i m m e d i a t e - m o d e   c a l l s   Ò¬    i t   h a s   n o   a w a r e n e s s   o f   w h e r e   p i x e l s   w e r e   u l t i m a t e l y   d r a w n   t o   t h e   f r a m e b u f f e r .   T h e   ` U I R e n d e r e r `   i s   s o l e l y   r e s p o n s i b l e   f o r   t r a n s l a t i n g   l o g i c a l   r e c t s   i n t o   p i x e l s ;   s h i f t i n g   t h a t   t r a n s l a t i o n   d o e s   n o t   a f f e c t   M i c r o U I ' s   i n t e r n a l   l a y o u t   o r   c l i c k - d e t e c t i o n   m a t h   a t   a l l .  
-  
- # # #   R e s u l t  
- ! [ P a r t   4   Ò¬    V i s u a l   O f f s e t   E x p e r i m e n t ] ( . . / n a n o r e n d e r / a s s e t s / t h i r d S t e p . p n g )  
-  
- - - -  
-  
- # #   P a r t   5 :   B i n d i n g   U I   t o   A p p l i c a t i o n   S t a t e  
-  
- # # #   A p p r o a c h  
- I   d e c l a r e d   t w o   n e w   g l o b a l   s t a t e   v a r i a b l e s   a l o n g s i d e   ` g _ c o l o r _ p h a s e ` :  
-  
- ` ` ` c p p  
- s t a t i c   f l o a t   w a v e _ f r e q   =   0 . 0 2 f ;  
- s t a t i c   i n t   w a v e s _ e n a b l e d   =   1 ;  
- ` ` `  
-  
- T h e s e   a r e   b o u n d   t o   t w o   n e w   w i d g e t s   i n s i d e   t h e   " W i d g e t s "   w i n d o w :  
-  
- ` ` ` c p p  
- m u _ l a b e l ( c t x ,   " W a v e   f r e q u e n c y : " ) ;  
- m u _ s l i d e r ( c t x ,   & w a v e _ f r e q ,   0 . 0 0 1 f ,   0 . 1 f ) ;  
- m u _ c h e c k b o x ( c t x ,   " E n a b l e   w a v e   p a t t e r n " ,   & w a v e s _ e n a b l e d ) ;  
- ` ` `  
-  
- T h e   b a c k g r o u n d   r e n d e r i n g   l o o p   f r o m   P a r t   1   r e a d s   t h e s e   v a r i a b l e s   e v e r y   f r a m e :  
-  
- ` ` ` c p p  
- i f   ( w a v e s _ e n a b l e d )   {  
-     r   =   ( u i n t 8 _ t ) ( 1 2 8   +   1 2 7   *   s i n f ( ( x   +   y )   *   w a v e _ f r e q   +   g _ c o l o r _ p h a s e ) ) ;  
-     g   =   ( u i n t 8 _ t ) ( 1 2 8   +   1 2 7   *   s i n f ( ( x   -   y )   *   w a v e _ f r e q   +   g _ c o l o r _ p h a s e ) ) ;  
-     b   =   1 0 0 ;  
- }   e l s e   {  
-     r   =   g   =   b   =   4 0 ;   / /   f l a t   d a r k   g r a y   w h e n   d i s a b l e d  
- }  
- ` ` `  
-  
- # # #   R e s u l t  
- D r a g g i n g   t h e   s l i d e r   l i v e - a d j u s t s   t h e   w a v e   b a n d   s p a c i n g   b y   c h a n g i n g   ` w a v e _ f r e q `   d i r e c t l y   t h r o u g h   t h e   p o i n t e r   ` & w a v e _ f r e q `   e v e r y   f r a m e .   U n c h e c k i n g   " E n a b l e   w a v e   p a t t e r n "   i m m e d i a t e l y   s w i t c h e s   t h e   b a c k g r o u n d   t o   f l a t   d a r k   g r a y   Ò¬    d e m o n s t r a t i n g   h o w   t h e   s a m e   I m m e d i a t e   M o d e   b i n d i n g   p a t t e r n   f r o m   P a r t   2   e x t e n d s   n a t u r a l l y   t o   d r i v e   p r o c e d u r a l   r e n d e r i n g .  
-  
- # # #   R e s u l t  
- ! [ P a r t   5   Ò¬    W a v e   F r e q u e n c y   S l i d e r ] ( . . / n a n o r e n d e r / a s s e t s / f o r t h S t e p . p n g )  
-  
- - - -  
-  
- # #   P a r t   6 :   I n t e r a c t i v e   L i n e   D r a w i n g   A p p  
-  
- # # #   B r e s e n h a m ' s   L i n e   A l g o r i t h m  
- I   i m p l e m e n t e d   ` d r a w _ l i n e `   u s i n g   t h e   u n i f i e d   s i n g l e - l o o p   v a r i a n t   o f   B r e s e n h a m ' s   a l g o r i t h m ,   w h i c h   a v o i d s   b r a n c h i n g   i n t o   s e p a r a t e   c o d e   p a t h s   f o r   e a c h   o f   t h e   8   o c t a n t s :  
-  
- ` ` ` c p p  
- v o i d   d r a w _ l i n e ( i n t   x 0 ,   i n t   y 0 ,   i n t   x 1 ,   i n t   y 1 ,   u i n t 3 2 _ t   c o l o r )   {  
-     i n t   d x   =   a b s ( x 1   -   x 0 ) ;  
-     i n t   d y   =   - a b s ( y 1   -   y 0 ) ;  
-     i n t   s x   =   ( x 0   <   x 1 )   ?   1   :   - 1 ;  
-     i n t   s y   =   ( y 0   <   y 1 )   ?   1   :   - 1 ;  
-     i n t   e r r   =   d x   +   d y ;  
-     i n t   x   =   x 0 ,   y   =   y 0 ;  
-     w h i l e   ( t r u e )   {  
-         i f   ( x   > =   0   & &   x   <   W I D T H   & &   y   > =   0   & &   y   <   H E I G H T )  
-             g _ b u f f e r [ y   *   W I D T H   +   x ]   =   c o l o r ;  
-         i f   ( x   = =   x 1   & &   y   = =   y 1 )   b r e a k ;  
-         i n t   e 2   =   2   *   e r r ;  
-         i f   ( e 2   > =   d y )   {   e r r   + =   d y ;   x   + =   s x ;   }  
-         i f   ( e 2   < =   d x )   {   e r r   + =   d x ;   y   + =   s y ;   }  
-     }  
- }  
- ` ` `  
-  
- ` s x ` / ` s y `   e n c o d e   d i r e c t i o n   a s   + 1 / - 1   i n s t e a d   o f   b r a n c h i n g   p e r   d i r e c t i o n ,   a n d   t h e   s i n g l e   ` e r r `   a c c u m u l a t o r   h a n d l e s   b o t h   s t e e p   a n d   s h a l l o w   s l o p e s   w i t h i n   t h e   s a m e   l o o p   b o d y   Ò¬    s a t i s f y i n g   t h e   D R Y   r e q u i r e m e n t .  
-  
- # # #   A I - A s s i s t e d   U X   P l a n n i n g  
- B e f o r e   i m p l e m e n t i n g   i n t e r a c t i v e   d r a w i n g ,   I   u s e d   A I   a s s i s t a n c e   t o   r e a s o n   t h r o u g h   t h r e e   p o s s i b l e   U X   a p p r o a c h e s :  
-  
- 1 .   * * C l i c k - c l i c k   ( t w o   s e p a r a t e   c l i c k s ) : * *   S i m p l e   t o   i m p l e m e n t   b u t   n o   l i v e   p r e v i e w   a n d   r i s k s   a c c i d e n t a l   l i n e   c r e a t i o n .  
- 2 .   * * C l i c k - d r a g - r e l e a s e : * *   M a t c h e s   t h e   s t a n d a r d   m e n t a l   m o d e l   o f   m o s t   d r a w i n g   t o o l s   ( P a i n t ,   F i g m a ,   e t c . ) ,   n a t u r a l l y   s u p p o r t s   a   l i v e   p r e v i e w   w h i l e   d r a g g i n g ,   a n d   o n l y   r e q u i r e s   t h r e e   p i e c e s   o f   s t a t e .  
- 3 .   * * C o n t i n u o u s / b r u s h   m o d e : * *   G o o d   f o r   f r e e f o r m   s k e t c h i n g   b u t   o v e r k i l l   f o r   c l e a n   g e o m e t r i c   l i n e s .  
-  
- I   c h o s e   * * c l i c k - d r a g - r e l e a s e * *   f o r   t h e   b e s t   b a l a n c e   o f   i n t u i t i v e   U X   a n d   s i m p l e   s t a t e   m a n a g e m e n t ,   w i t h   a   l i v e   p r e v i e w   s o   t h e   u s e r   c a n   s e e   e x a c t l y   w h e r e   t h e   l i n e   w i l l   l a n d   b e f o r e   c o m m i t t i n g .  
-  
- # # #   T h e   C r e a t i v e   C a n v a s  
- I   i m p l e m e n t e d   p e r m a n e n t   l i n e   s t o r a g e   a n d   c l i c k - d r a g - r e l e a s e   i n t e r a c t i o n .   A   d r a g   b e g i n s   o n l y   w h e n   t h e   m o u s e   i s   p r e s s e d   o u t s i d e   a n y   M i c r o U I   w i d g e t   ( ` c t x - > h o v e r   = =   0 ` ) ,   p r e v e n t i n g   a c c i d e n t a l   l i n e   c r e a t i o n   w h i l e   i n t e r a c t i n g   w i t h   U I   p a n e l s .   W h i l e   d r a g g i n g ,   a   l i v e   p r e v i e w   l i n e   i s   d r a w n   e a c h   f r a m e ;   o n   r e l e a s e   t h e   l i n e   i s   c o m m i t t e d   p e r m a n e n t l y .  
-  
- * * E x t e n s i o n s   a d d e d : * *  
- -   * * R G B   s l i d e r s * *   c o n t r o l l i n g   t h e   c o l o r   o f   t h e   n e x t   l i n e   d r a w n   ( a n d   t h e   l i v e   p r e v i e w )  
- -   * * A   " C l e a r   S c r e e n "   b u t t o n * *   r e s e t t i n g   ` g _ l i n e _ c o u n t `   t o   0  
-  
- # # #   R e s u l t  
- ! [ P a r t   6   Ò¬    L i n e   D r a w i n g   w i t h   R G B   C o l o r   C o n t r o l ] ( . . / n a n o r e n d e r / a s s e t s / f i f t h S t e p 1 . p n g )  
- ! [ P a r t   6   Ò¬    D r a w i n g   i n   A c t i o n ] ( . . / n a n o r e n d e r / a s s e t s / f i f t h S t e p 2 . p n g )  
- 
+*   **Task:** Implement Xiaolin Wu's line algorithm. Because our assignment ignores the alpha channel (as established in Part 1). Note what happens when you draw a line on top of another line and attempt to fix the issue. Finally, add a UI toggle to instantly switch between Bresenham and Xiaolin Wu modes to visually compare the results.
+
+# Submission Report
+
+## Part 1: Manipulating the Framebuffer
+
+### Approach
+I modified the background rendering loop in `main.cpp` to generate a **diagonal wave interference pattern** instead of the original linear gradient. The original code used `x` for red and `y` for green independently â€” producing a simple two-axis gradient with no real 2D interaction between the axes.
+
+My implementation combines `x` and `y` together using `sinf()`:
+
+```cpp
+uint8_t r = (uint8_t)(128 + 127 * sinf((x + y) * wave_freq + g_color_phase));
+uint8_t g = (uint8_t)(128 + 127 * sinf((x - y) * wave_freq + g_color_phase));
+uint8_t b = 100;
+```
+
+- The **red channel** oscillates along `x + y` â€” diagonal bands going top-left to bottom-right.
+- The **green channel** oscillates along `x - y` â€” diagonal bands going the opposite direction.
+- Since `sinf()` outputs values between -1 and 1, I scaled by 127 and shifted by 128 to keep all values in the valid 0â€“255 byte range.
+- The two crossing diagonal wave patterns interfere with each other, creating a crosshatch-style color shimmer across the screen.
+
+### Result
+![Part 1 â€” Diagonal Wave Pattern](../nanorender/assets/hw1_step1def.png)
+
+---
+
+## Part 2: Immediate Mode UI Declaration
+
+### Approach
+I added a new checkbox widget bound to a `static int show_secret` variable. Below it, a label is recalculated every frame based on the checkbox's current value:
+
+```cpp
+mu_checkbox(ctx, "Toggle secret message", &show_secret);
+if (show_secret) {
+  mu_label(ctx, "You found the secret message!");
+} else {
+  mu_label(ctx, "Check the box above...");
+}
+```
+
+### Immediate Mode Demonstration
+This illustrates the core Immediate Mode principle: the checkbox has no internal memory of its own. Each frame, `mu_checkbox` directly mutates `show_secret` through the pointer passed to it, and the label content is freshly decided by the `if` statement every single frame. There is no persistent "Label object" being updated â€” the entire UI tree is rebuilt from scratch each frame.
+
+### Result
+![Part 2 â€” Toggle Checkbox](../nanorender/assets/firstStep.png)
+
+---
+
+## Part 3: The Real-Time Graphics Loop and Input Handling
+
+### Approach
+I added a global state variable `g_color_phase` and modified the character input callback so that pressing `c` shifts the color phase of the background wave pattern:
+
+```cpp
+mfb_set_char_input_callback(
+  [](struct mfb_window *w, unsigned int c) {
+    if (c == 'c') {
+      g_color_phase += 2.0f;
+      return; // consume the event
+    }
+    extern void ui_bridge_char_input(struct mfb_window *, unsigned int);
+    ui_bridge_char_input(w, c);
+  },
+  window);
+```
+
+`g_color_phase` is added into the `sinf()` calculations in the background loop, so each press of `c` visibly shifts the wave pattern's colors.
+
+### Event Consumption
+Note the `return;` after handling `'c'`. This **consumes** the event â€” the keystroke never reaches `ui_bridge_char_input`, so it won't be typed into any focused textbox. Had I omitted the `return`, the character `'c'` would fall through to the UI bridge and be typed into any focused textbox. I chose to consume it here because `c` is meant as a global application shortcut, not a printable character.
+
+### Result
+![Part 3 â€” Color Phase Shift](../nanorender/assets/secondStep.png)
+
+---
+
+## Part 4: UI Architecture and the Renderer Bridge
+
+### Approach
+In `ui_renderer.cpp`, I modified `draw_rect` to apply a visual pixel offset when writing to `m_buffer`, without changing the logical rect coordinates used for layout and hit-testing:
+
+```cpp
+int shift_x = 100;
+int shift_y = 80;
+
+for (int y = y1; y < y2; y++) {
+    for (int x = x1; x < x2; x++) {
+        int dx = x + shift_x;
+        int dy = y + shift_y;
+        if (dx >= 0 && dx < m_width && dy >= 0 && dy < m_height) {
+            m_buffer[dy * m_width + dx] = c;
+        }
+    }
+}
+```
+
+This change was reverted after the experiment so the UI remained usable for the rest of the assignment.
+
+### Result and Explanation
+After applying the offset, all button/window background rectangles visually shifted 100px right and 80px down. However, `draw_text` was left unmodified, so text labels remained at their original positions.
+
+**Key finding:** Clicking directly on the visible "Quit" text successfully triggered the quit action, while clicking on the visibly shifted gray rectangle background did nothing.
+
+This happens because MicroUI's input hit-testing always operates on the *original* rect coordinates passed into the immediate-mode calls â€” it has no awareness of where pixels were ultimately drawn to the framebuffer. The `UIRenderer` is solely responsible for translating logical rects into pixels; shifting that translation does not affect MicroUI's internal layout or click-detection math at all.
+
+### Result
+![Part 4 â€” Visual Offset Experiment](../nanorender/assets/thirdStep.png)
+
+---
+
+## Part 5: Binding UI to Application State
+
+### Approach
+I declared two new global state variables alongside `g_color_phase`:
+
+```cpp
+static float wave_freq = 0.02f;
+static int waves_enabled = 1;
+```
+
+These are bound to two new widgets inside the "Widgets" window:
+
+```cpp
+mu_label(ctx, "Wave frequency:");
+mu_slider(ctx, &wave_freq, 0.001f, 0.1f);
+mu_checkbox(ctx, "Enable wave pattern", &waves_enabled);
+```
+
+The background rendering loop from Part 1 reads these variables every frame:
+
+```cpp
+if (waves_enabled) {
+  r = (uint8_t)(128 + 127 * sinf((x + y) * wave_freq + g_color_phase));
+  g = (uint8_t)(128 + 127 * sinf((x - y) * wave_freq + g_color_phase));
+  b = 100;
+} else {
+  r = g = b = 40; // flat dark gray when disabled
+}
+```
+
+### Result
+Dragging the slider live-adjusts the wave band spacing by changing `wave_freq` directly through the pointer `&wave_freq` every frame. Unchecking "Enable wave pattern" immediately switches the background to flat dark gray â€” demonstrating how the same Immediate Mode binding pattern from Part 2 extends naturally to drive procedural rendering.
+
+![Part 5 â€” Wave Frequency Slider](../nanorender/assets/forthStep.png)
+
+---
+
+## Part 6: Interactive Line Drawing App
+
+### Bresenham's Line Algorithm
+I implemented `draw_line` using the unified single-loop variant of Bresenham's algorithm, which avoids branching into separate code paths for each of the 8 octants:
+
+```cpp
+void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
+  int dx = abs(x1 - x0);
+  int dy = -abs(y1 - y0);
+  int sx = (x0 < x1) ? 1 : -1;
+  int sy = (y0 < y1) ? 1 : -1;
+  int err = dx + dy;
+  int x = x0, y = y0;
+  while (true) {
+    if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT)
+      g_buffer[y * WIDTH + x] = color;
+    if (x == x1 && y == y1) break;
+    int e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x += sx; }
+    if (e2 <= dx) { err += dx; y += sy; }
+  }
+}
+```
+
+`sx`/`sy` encode direction as +1/-1 instead of branching per direction, and the single `err` accumulator handles both steep and shallow slopes within the same loop body â€” satisfying the DRY requirement.
+
+### AI-Assisted UX Planning
+Before implementing interactive drawing, I used AI assistance to reason through three possible UX approaches:
+
+1. **Click-click (two separate clicks):** Simple to implement but no live preview and risks accidental line creation.
+2. **Click-drag-release:** Matches the standard mental model of most drawing tools (Paint, Figma, etc.), naturally supports a live preview while dragging, and only requires three pieces of state.
+3. **Continuous/brush mode:** Good for freeform sketching but overkill for clean geometric lines.
+
+I chose **click-drag-release** for the best balance of intuitive UX and simple state management, with a live preview so the user can see exactly where the line will land before committing.
+
+### The Creative Canvas
+I implemented permanent line storage and click-drag-release interaction. A drag begins only when the mouse is pressed outside any MicroUI widget (`ctx->hover == 0`), preventing accidental line creation while interacting with UI panels. While dragging, a live preview line is drawn each frame; on release the line is committed permanently.
+
+**Extensions added:**
+- **RGB sliders** controlling the color of the next line drawn (and the live preview)
+- **A "Clear Screen" button** resetting `g_line_count` to 0
+
+### Result
+![Part 6 â€” Line Drawing with RGB Color Control](../nanorender/assets/fifthStep1.png)
+![Part 6 â€” Drawing in Action](../nanorender/assets/fifthStep2.png)
