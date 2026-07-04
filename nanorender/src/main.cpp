@@ -437,39 +437,17 @@ mfb_set_char_input_callback(
         int max_x = std::min(WIDTH-1, std::max({x0, x1, x2}));
         int min_y = std::max(0, std::min({y0, y1, y2}));
         int max_y = std::min(HEIGHT-1, std::max({y0, y1, y2}));
-
-uint32_t color;
-        if (use_lighting) {
-          // Get face normal transformed by model matrix
-          glm::mat3 normal_matrix = glm::mat3(M_world * M_local);
-          glm::vec3 face_normal = glm::normalize(normal_matrix * g_face_normals[fi]);
-
-          // Simple shading: use absolute Y component as brightness
-          // (faces pointing up = bright, faces pointing sideways = medium)
-         // Use the largest normal component for brightness
-          float brightness = 0.3f + 0.7f * std::max({
-            abs(face_normal.x),
-            abs(face_normal.y), 
-            abs(face_normal.z)
-          });
-
-          // Apply material color with brightness
-        glm::vec3 result = glm::vec3(0.9f, 0.5f, 0.2f) * brightness + glm::vec3(0.2f, 0.1f, 0.05f);
-          result = glm::clamp(result, 0.0f, 1.0f);
-
-          uint8_t r = (uint8_t)(result.r * 255);
-          uint8_t g = (uint8_t)(result.g * 255);
-          uint8_t b = (uint8_t)(result.b * 255);
-          color = MFB_RGB(r, g, b);
-        } else {
-          color = face_color(fi);}
+      // Fill bounding box with random color
+        uint32_t color = face_color(fi);
         for (int y = min_y; y <= max_y; y++) {
           for (int x = min_x; x <= max_x; x++) {
             g_buffer[y * WIDTH + x] = color;
           }
         }
       }
-    } 
+    }
+
+
 // Part 2+3: Triangle Filling with Barycentric Coordinates + Z-Buffer
     if (show_filled) {
       for (int fi = 0; fi < (int)g_mesh_faces.size(); fi++) {
@@ -519,7 +497,7 @@ uint32_t color;
         float denom = cross2d(x1-x0, y1-y0, x2-x0, y2-y0);
         if (abs(denom) < 0.0001f) continue;
 
-uint32_t color;
+uint32_t color = face_color(fi);
         if (use_lighting) {
           // Transform normal to view space
           glm::mat3 normal_mat = glm::mat3(V * glm::mat4(glm::mat3(M_world * M_local)));
@@ -554,6 +532,15 @@ uint32_t color;
         } else {
           color = face_color(fi);
         }
+// Get vertex normals for Phong shading
+        glm::mat3 normal_mat = glm::mat3(V * glm::mat4(glm::mat3(M_world * M_local)));
+        glm::vec3 vn0 = glm::normalize(normal_mat * g_vertex_normals[face.v0]);
+        glm::vec3 vn1 = glm::normalize(normal_mat * g_vertex_normals[face.v1]);
+        glm::vec3 vn2 = glm::normalize(normal_mat * g_vertex_normals[face.v2]);
+
+        glm::vec3 light_dir = glm::normalize(glm::vec3(0.3f, 0.8f, 0.5f));
+        glm::vec3 view_dir  = glm::vec3(0.0f, 0.0f, 1.0f);
+
         for (int y = min_y; y <= max_y; y++) {
           for (int x = min_x; x <= max_x; x++) {
             float alpha = cross2d(x1-x0, y1-y0, x-x0, y-y0) / denom;
@@ -561,14 +548,38 @@ uint32_t color;
             float gamma = 1.0f - alpha - beta;
 
             if (alpha >= 0.0f && beta >= 0.0f && gamma >= 0.0f) {
-              // Interpolate depth using barycentric coords
               float depth = alpha * z0 + beta * z1 + gamma * z2;
-
-              // Z-buffer test
               int idx = y * WIDTH + x;
               if (depth < g_zbuffer[idx]) {
                 g_zbuffer[idx] = depth;
-                g_buffer[idx] = color;
+
+                if (use_lighting) {
+                  // Interpolate vertex normal using barycentric coords
+                  glm::vec3 n = glm::normalize(alpha * vn0 + beta * vn1 + gamma * vn2);
+
+                  // Ambient
+                  float ambient = 0.2f;
+
+                  // Diffuse
+                  float diff = std::max(0.0f, glm::dot(n, light_dir));
+                  diff = std::max(diff, std::max(0.0f, glm::dot(-n, light_dir)) * 0.5f);
+
+                  // Specular
+                  glm::vec3 reflect_dir = glm::reflect(-light_dir, n);
+                  float spec = pow(std::max(0.0f, glm::dot(reflect_dir, view_dir)),
+                                   g_material.shininess);
+
+                  // Combine
+                  glm::vec3 base_color = glm::vec3(0.7f, 0.5f, 0.3f);
+                  glm::vec3 result = base_color * (ambient + diff * 0.7f)
+                                   + glm::vec3(1.0f, 1.0f, 1.0f) * spec * 0.8f;
+                  result = glm::clamp(result, 0.0f, 1.0f);
+                  g_buffer[idx] = MFB_RGB((uint8_t)(result.r*255),
+                                          (uint8_t)(result.g*255),
+                                          (uint8_t)(result.b*255));
+                } else {
+                  g_buffer[idx] = color;
+                }
               }
             }
           }
