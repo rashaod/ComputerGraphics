@@ -524,22 +524,33 @@ uint32_t color;
           // Transform normal to view space
           glm::mat3 normal_mat = glm::mat3(V * glm::mat4(glm::mat3(M_world * M_local)));
           glm::vec3 n = glm::normalize(normal_mat * g_face_normals[fi]);
-          
-          // Light direction in view space (fixed above-front)
+
+          // Light direction in view space
           glm::vec3 light_dir = glm::normalize(glm::vec3(0.3f, 0.8f, 0.5f));
-          
-          // Lambert diffuse
+
+          // View direction (camera looks down -Z in view space)
+          glm::vec3 view_dir = glm::vec3(0.0f, 0.0f, 1.0f);
+
+          // Ambient
+          float ambient = 0.2f;
+
+          // Diffuse (Lambert)
           float diff = std::max(0.0f, glm::dot(n, light_dir));
-          // Use abs to also light back faces
           diff = std::max(diff, std::max(0.0f, glm::dot(-n, light_dir)) * 0.5f);
-          
-          // Ambient + diffuse
-          float ambient = 0.3f;
-          float brightness = ambient + (1.0f - ambient) * diff;
-          
-          glm::vec3 result = glm::vec3(0.7f, 0.5f, 0.3f) * brightness;
+
+          // Specular (Phong)
+          glm::vec3 reflect_dir = glm::reflect(-light_dir, n);
+          float spec = pow(std::max(0.0f, glm::dot(reflect_dir, view_dir)),
+                          g_material.shininess);
+
+          // Combine ambient + diffuse + specular
+          glm::vec3 base_color = glm::vec3(0.7f, 0.5f, 0.3f);
+          glm::vec3 result = base_color * (ambient + diff * 0.7f)
+                           + glm::vec3(1.0f, 1.0f, 1.0f) * spec * 0.8f;
           result = glm::clamp(result, 0.0f, 1.0f);
-          color = MFB_RGB((uint8_t)(result.r*255), (uint8_t)(result.g*255), (uint8_t)(result.b*255));
+          color = MFB_RGB((uint8_t)(result.r*255),
+                          (uint8_t)(result.g*255),
+                          (uint8_t)(result.b*255));
         } else {
           color = face_color(fi);
         }
