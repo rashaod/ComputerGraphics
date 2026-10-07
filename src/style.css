@@ -8,5 +8,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d25; fon
 #panel h1 { font-size: 16px; margin: 0 0 8px; }
 #panel h2 { font-size: 13px; margin: 12px 0 4px; color: #9fb4ff; }
 #panel label { display: block; margin: 6px 0; }
+#panel input[type=checkbox] { vertical-align: middle; margin: 0 6px 0 0; }
 #panel input[type=range] { width: 100%; }
 #panel span { float: right; color: #ffd479; }

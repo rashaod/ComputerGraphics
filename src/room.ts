@@ -5,6 +5,7 @@
 // rectangle 0..length on X and 0..width on Z, and the ceiling is at y = height.
 
 import * as THREE from "three";
+import { createPhongMaterial } from "./phong";
 
 /** The room size in centimetres. Later parts read this to test if equipment fits. */
 export interface Room {
@@ -18,8 +19,9 @@ export interface Room {
  * and a thin outline of the whole room so the ceiling height is visible.
  * Returns one THREE.Group so the caller can remove and rebuild it when a slider moves.
  *
- * Note: in Part 1 the surfaces use THREE.MeshBasicMaterial (flat colour, no lighting).
- * Part 2 replaces this with our own shader that implements the Phong slides.
+ * Since Part 2 the floor and walls are lit by our own Phong shader (phong.ts).
+ * The floor is slightly shiny (like a rubber gym floor) so the specular term is visible;
+ * the walls are matte paint (k_s = 0).
  */
 export function buildRoom(room: Room): THREE.Group {
   const group = new THREE.Group();
@@ -28,7 +30,12 @@ export function buildRoom(room: Room): THREE.Group {
   // Floor: a flat rectangle lying on y = 0.
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(length, width),
-    new THREE.MeshBasicMaterial({ color: 0x5a5d68, side: THREE.DoubleSide })
+    createPhongMaterial({
+      k_a: new THREE.Color(0.2, 0.21, 0.24),
+      k_d: new THREE.Color(0.2, 0.21, 0.24),
+      k_s: new THREE.Color(0.35, 0.35, 0.35),
+      alpha: 20,
+    }, true)
   );
   floor.rotation.x = -Math.PI / 2;             // PlaneGeometry is vertical by default; lay it down
   floor.position.set(length / 2, 0, width / 2); // move its centre to the middle of the room
@@ -40,14 +47,19 @@ export function buildRoom(room: Room): THREE.Group {
   for (let z = 0; z <= width; z += 50) gridPoints.push(new THREE.Vector3(0, 0.1, z), new THREE.Vector3(length, 0.1, z));
   const grid = new THREE.LineSegments(
     new THREE.BufferGeometry().setFromPoints(gridPoints),
-    new THREE.LineBasicMaterial({ color: 0x777b88 })
+    new THREE.LineBasicMaterial({ color: 0x3a3c44 })
   );
   group.add(grid);
 
   // Back wall: lies on the plane z = 0.
   const backWall = new THREE.Mesh(
     new THREE.PlaneGeometry(length, height),
-    new THREE.MeshBasicMaterial({ color: 0x3e4252, side: THREE.DoubleSide })
+    createPhongMaterial({
+      k_a: new THREE.Color(0.26, 0.28, 0.34),
+      k_d: new THREE.Color(0.26, 0.28, 0.34),
+      k_s: new THREE.Color(0, 0, 0),
+      alpha: 1,
+    }, true)
   );
   backWall.position.set(length / 2, height / 2, 0);
   group.add(backWall);
@@ -55,7 +67,12 @@ export function buildRoom(room: Room): THREE.Group {
   // Left wall: lies on the plane x = 0.
   const leftWall = new THREE.Mesh(
     new THREE.PlaneGeometry(width, height),
-    new THREE.MeshBasicMaterial({ color: 0x474b5e, side: THREE.DoubleSide })
+    createPhongMaterial({
+      k_a: new THREE.Color(0.3, 0.32, 0.38),
+      k_d: new THREE.Color(0.3, 0.32, 0.38),
+      k_s: new THREE.Color(0, 0, 0),
+      alpha: 1,
+    }, true)
   );
   leftWall.rotation.y = Math.PI / 2;
   leftWall.position.set(0, height / 2, width / 2);
