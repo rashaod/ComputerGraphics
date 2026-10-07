@@ -18,3 +18,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d25; fon
 #panel button { background: #3b4a7a; color: #fff; border: 0; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
 #panel button:hover { background: #4d5f99; }
 #panel { max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.dist-label {
+  position: absolute; transform: translate(-50%, -50%);
+  background: rgba(20, 22, 30, 0.85); color: #fff; font-size: 11px; white-space: nowrap;
+  padding: 1px 5px; border: 2px solid #fff; border-radius: 4px;
+}

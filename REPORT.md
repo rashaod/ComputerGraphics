@@ -220,3 +220,55 @@ All the mouse work is done with the line and plane formulas from the *Basic Geom
 - Only 90° turns. Free rotation would make the boxes non-axis-aligned and need a different overlap test that is not in the lectures.
 - Picking uses each piece's whole box, so clicking the empty space *inside* the squat rack frame selects the rack, not the piece behind it.
 - Pieces can be dragged through walls and out of the room on purpose — the planner should *show* the problem rather than hide it (Part 7).
+
+---
+
+## Part 7 — Does each piece fit in the room?
+
+### Approach
+This is the first part that answers the project's question. Each wall and the ceiling is a **plane** `A·x + B·y + C·z + D = 0` with normal `n = (A, B, C)` (Basic Geometry, slide 20), chosen so that `n` points **into** the room (`src/checks.ts`):
+
+| Plane | n | D | "inside" means |
+|---|---|---|---|
+| left wall | (1, 0, 0) | 0 | x ≥ 0 |
+| right wall | (−1, 0, 0) | length | x ≤ length |
+| back wall | (0, 0, 1) | 0 | z ≥ 0 |
+| front wall | (0, 0, −1) | width | z ≤ width |
+| ceiling | (0, −1, 0) | height | y ≤ height |
+
+For every piece, the **8 corners** of its box are measured against every plane with the **point–plane distance** of slide 20, `D = (w·n + d) / ‖n‖`. The slide takes the absolute value; we keep the **sign**, because with inward normals the sign tells us which side the corner is on: positive = inside, negative = outside. The smallest value over all corners and planes is the piece's **clearance** — how much room is left to the closest wall — and if it is negative, the piece sticks out by that much. The planner also lists *every* plane a piece sticks through (for example a rack that is both too long and too tall).
+
+Visual feedback for each piece:
+- its box outline and its footprint on the floor in a **status colour**;
+- a short line from the closest corner straight to the closest wall (the perpendicular, `foot = w − dist·n`), with a label showing the distance in cm (the label is placed with the same projection as hw3: 3D point → normalized device coordinates → pixel);
+- a line in the panel, e.g. *"Squat rack: ❌ sticks out 40 cm through the right wall (also: ceiling)"*.
+
+**Colour from the HSV model (Color lecture, slide 38).** The status colour is built in HSV, where H is the angle around the V axis: **only the hue changes** — from 0° (red, sticking out) through orange and yellow to 120° (green, 20 cm or more of space) — while S and V stay fixed, so every status colour is equally bright and readable on the dark background. `hsvToRgb()` implements the standard conversion (6 sectors of 60°). Doing the same in RGB would mean changing two channels at once and passing through a dull brown in the middle.
+
+The checks run every frame (a few pieces × 8 corners × 5 planes is very cheap), so the colours update live while a piece is dragged or a room slider moves. The checkbox *Show clearance colours & distances* switches all overlays off for a clean view.
+
+**Relation to the homework:** hw3 drew a bounding box only as a debugging aid. Here the box is the input to a real measurement, and the result is the answer the user came for.
+
+### Result
+![Default room vs a smaller room](./assets/part7_fit.jpg)
+
+*Left: the default 400 × 350 × 250 cm room — every piece is green, with 20–80 cm to its closest wall. Right: the same layout in a 340 × 300 × 210 cm room. The panel reports:*
+
+| Piece | Result |
+|---|---|
+| Treadmill | ✔ 20 cm to the left wall |
+| Squat rack | ❌ sticks out 40 cm through the right wall (also: ceiling) |
+| Yoga mat | ✔ 80 cm to the left wall |
+| Bench | ❌ sticks out 20 cm through the right wall |
+| Exercise bike | ✔ 8 cm to the front wall (yellow: tight) |
+
+*Hand check: the rack spans x = 260…380 cm, so in a 340 cm room it is 380 − 340 = 40 cm outside, and it is 215 cm tall in a 210 cm room (5 cm through the ceiling). The bike spans z = 237.5…292.5 cm, 7.5 cm from the 300 cm front wall (rounded to 8).*
+
+![Checks switched off and on](./assets/part7_toggle.jpg)
+
+*The same small room with the checks switched off (left) and on (right).*
+
+### Limitations
+- The check uses each piece's **box**, not its exact shape, so it is cautious: a piece is reported as touching a wall when only the corner of its box does. For furniture planning, erring on the safe side is acceptable.
+- The planner shows the problem but does not move pieces automatically.
+- The floor is not checked (pieces always stand on it), and there are no doors, windows or radiators yet.

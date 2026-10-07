@@ -9,6 +9,8 @@
   <body>
     <!-- The 3D view. three.js draws into this canvas. -->
     <canvas id="view"></canvas>
+    <!-- Distance labels (Part 7) are HTML text placed over the canvas. -->
+    <div id="labels"></div>
 
     <!-- Control panel (plain HTML, no UI library). -->
     <div id="panel">
@@ -53,6 +55,10 @@
         <button id="deleteBtn">Delete (Del)</button>
       </div>
       <div class="stats">Drag a piece to move it · arrows = 5 cm steps</div>
+
+      <h2>Fits in the room? (Part 7)</h2>
+      <label><input id="showFit" type="checkbox" checked /> Show clearance colours &amp; distances</label>
+      <div id="fitList" class="stats"></div>
 
       <h2>Equipment meshes</h2>
       <label><input id="showWire" type="checkbox" /> Show triangles (wireframe)</label>

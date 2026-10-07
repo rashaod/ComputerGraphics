@@ -7,6 +7,7 @@ import { lightUniforms } from "./phong";
 import { CATALOGUE, DEFAULT_LAYOUT } from "./equipment";
 import { PlacedItem, itemBox, applyPlacement, footprint } from "./placement";
 import { linePlaneIntersection, lineSphereHit, lineBoxT } from "./geometry";
+import { roomPlanes, fitInRoom, clearanceColor } from "./checks";
 import { FVMesh, vertexNormalsAverage, vertexNormalsAreaWeighted, normalLines, toBufferGeometry } from "./mesh";
 
 // ---------- Renderer, scene, camera ----------
@@ -129,6 +130,19 @@ interface ScenePart {
   normalViz: THREE.LineSegments;
 }
 let sceneParts: ScenePart[] = [];
+
+// Part 7 overlays for every placed piece: its box outline and footprint in the status colour,
+// a line from its closest corner to the closest wall, and a text label with the distance.
+interface CheckOverlay {
+  outline: THREE.LineSegments;
+  footprintFill: THREE.Mesh;
+  distLine: THREE.Line;
+  label: HTMLDivElement;
+}
+const overlays = new Map<number, CheckOverlay>();
+const labelLayer = document.getElementById("labels") as HTMLDivElement;
+const unitBoxEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+const unitSquare = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2); // lying flat on the floor
 let items: PlacedItem[] = [];
 let nextId = 1;
 const normalVizMaterial = new THREE.LineBasicMaterial({ color: 0xffd479 });
@@ -162,6 +176,20 @@ function addItem(typeName: string, x: number, z: number, turned = false): Placed
   applyPlacement(item);
   scene.add(item.group);
   items.push(item);
+
+  // Part 7 overlays (positioned every frame by updateChecks)
+  const ov: CheckOverlay = {
+    outline: new THREE.LineSegments(unitBoxEdges, new THREE.LineBasicMaterial()),
+    footprintFill: new THREE.Mesh(unitSquare, new THREE.MeshBasicMaterial({
+      transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide })),
+    distLine: new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+      new THREE.LineBasicMaterial({ color: 0xffffff })),
+    label: document.createElement("div"),
+  };
+  ov.label.className = "dist-label";
+  labelLayer.appendChild(ov.label);
+  scene.add(ov.outline, ov.footprintFill, ov.distLine);
+  overlays.set(item.id, ov);
   return item;
 }
 
@@ -173,6 +201,11 @@ function removeItem(item: PlacedItem): void {
   });
   sceneParts = sceneParts.filter((p) => p.itemId !== item.id);
   items = items.filter((i) => i !== item);
+  const ov = overlays.get(item.id)!;
+  scene.remove(ov.outline, ov.footprintFill, ov.distLine);
+  ov.distLine.geometry.dispose();
+  ov.label.remove();
+  overlays.delete(item.id);
 }
 
 for (const placed of DEFAULT_LAYOUT) addItem(placed.type, placed.x, placed.z);
@@ -214,7 +247,7 @@ let selected: PlacedItem | null = null;
 // The selected piece is outlined with its BOX (the box all later checks use).
 const selectionOutline = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
-  new THREE.LineBasicMaterial({ color: 0xffd479 })
+  new THREE.LineBasicMaterial({ color: 0xffffff })
 );
 selectionOutline.visible = false;
 scene.add(selectionOutline);
@@ -229,7 +262,8 @@ function updateSelectionView(): void {
   }
   const { min, max } = itemBox(selected);
   selectionOutline.visible = true;
-  selectionOutline.scale.copy(max.clone().sub(min));                 // unit cube → box size
+  selectionOutline.scale.copy(max.clone().sub(min)).addScalar(4);    // unit cube → box size (+4 cm so it
+                                                                     // does not hide the status outline)
   selectionOutline.position.copy(min.clone().add(max).multiplyScalar(0.5)); // → box centre
   const f = footprint(selected);
   info.innerHTML = `<b>${selected.type.name}</b><br>centre x = ${selected.x} cm, z = ${selected.z} cm<br>` +
@@ -379,6 +413,60 @@ lookSelect.addEventListener("change", () => {
   controls.update();
 });
 
+// ---------- Part 7: does every piece fit in the room? ----------
+const showFit = document.getElementById("showFit") as HTMLInputElement;
+const fitList = document.getElementById("fitList") as HTMLDivElement;
+let lastFitHtml = "";
+
+/**
+ * Runs the fit check for every piece (checks.ts) and updates the overlays.
+ * Called every frame: it is cheap (a few pieces × 8 corners × 5 planes), and it means the
+ * colours follow the piece while it is being dragged or while the room sliders move.
+ */
+function updateChecks(): void {
+  const planes = roomPlanes(room);
+  const rows: string[] = [];
+  const r = canvas.getBoundingClientRect();
+  for (const it of items) {
+    const ov = overlays.get(it.id)!;
+    const { min, max } = itemBox(it);
+    const fit = fitInRoom(min, max, planes);
+    const color = clearanceColor(fit.clearance);
+    const cm = Math.round(fit.clearance);
+
+    // box outline + footprint on the floor, in the status colour
+    const size = max.clone().sub(min);
+    ov.outline.position.copy(min.clone().add(max).multiplyScalar(0.5));
+    ov.outline.scale.copy(size);
+    (ov.outline.material as THREE.LineBasicMaterial).color.copy(color);
+    ov.footprintFill.position.set((min.x + max.x) / 2, 0.3, (min.z + max.z) / 2);
+    ov.footprintFill.scale.set(size.x, 1, size.z);
+    (ov.footprintFill.material as THREE.MeshBasicMaterial).color.copy(color);
+
+    // distance line: from the closest corner straight to the closest wall (the perpendicular)
+    ov.distLine.geometry.setFromPoints([fit.corner, fit.foot]);
+
+    // label at the middle of the line, projected to the screen (the same projection as hw3)
+    const mid = fit.corner.clone().add(fit.foot).multiplyScalar(0.5).project(camera);
+    ov.label.style.left = `${((mid.x + 1) / 2) * r.width}px`;
+    ov.label.style.top = `${((1 - mid.y) / 2) * r.height}px`;
+    ov.label.textContent = cm < 0 ? `${-cm} cm outside!` : `${cm} cm`;
+    ov.label.style.borderColor = `#${color.getHexString(THREE.SRGBColorSpace)}`;
+
+    const visible = showFit.checked;
+    ov.outline.visible = ov.footprintFill.visible = ov.distLine.visible = visible;
+    ov.label.style.display = visible && mid.z < 1 ? "block" : "none"; // mid.z ≥ 1: behind the camera
+
+    const others = fit.outside.filter((w) => w !== fit.wall);
+    const status = cm < 0
+      ? `❌ sticks out ${-cm} cm through the ${fit.wall}` + (others.length ? ` (also: ${others.join(", ")})` : "")
+      : `✔ ${cm} cm to the ${fit.wall}`;
+    rows.push(`<b style="color:#${color.getHexString(THREE.SRGBColorSpace)}">■</b> ${it.type.name}: ${status}`);
+  }
+  const html = rows.join("<br>");
+  if (html !== lastFitHtml) { fitList.innerHTML = html; lastFitHtml = html; } // touch the DOM only on change
+}
+
 // ---------- Start ----------
 rebuildRoom();
 updateLamp();
@@ -403,6 +491,7 @@ resize();
 // Render loop: draw a new frame every time the browser is ready.
 function frame(): void {
   controls.update();
+  updateChecks();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }

@@ -85,3 +85,13 @@ export function lineBoxT(
   }
   return best;
 }
+
+/**
+ * Point–plane distance (slide 20):  D = |w·n + d| / ‖n‖   for the plane A·x + B·y + C·z + d = 0.
+ * We keep the SIGN (no absolute value): with the plane's normal pointing INTO the room,
+ *   positive = the point is on the inner side (inside the room), negative = it is outside.
+ * That sign is exactly what "does it fit?" needs.
+ */
+export function signedPointPlaneDistance(w: THREE.Vector3, n: THREE.Vector3, d: number): number {
+  return (w.dot(n) + d) / n.length();
+}
