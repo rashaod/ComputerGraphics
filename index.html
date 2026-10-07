@@ -33,6 +33,14 @@
 
       <h2>Equipment meshes</h2>
       <label><input id="showWire" type="checkbox" /> Show triangles (wireframe)</label>
+      <label><input id="showNormals" type="checkbox" /> Show vertex normals</label>
+      <label>Vertex normals (Mesh slide 11)
+        <select id="normalMethod">
+          <option value="average">Plain average</option>
+          <option value="area" selected>Area-weighted average</option>
+        </select></label>
+      <label>Look at
+        <select id="lookAt"><option value="room">Whole room</option></select></label>
       <div id="meshStats" class="stats"></div>
     </div>
 

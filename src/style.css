@@ -12,3 +12,4 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d25; fon
 #panel input[type=range] { width: 100%; }
 #panel span { float: right; color: #ffd479; }
 #panel .stats { font-size: 11px; color: #b8bccb; line-height: 1.5; }
+#panel select { width: 100%; margin-top: 3px; background: #1f222c; color: #e6e6ee; border: 1px solid #4a4f63; border-radius: 4px; padding: 2px; }

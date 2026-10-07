@@ -5,7 +5,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildRoom, Room } from "./room";
 import { lightUniforms } from "./phong";
 import { CATALOGUE, DEFAULT_LAYOUT } from "./equipment";
-import { vertexNormalsAverage, toBufferGeometry } from "./mesh";
+import { FVMesh, vertexNormalsAverage, vertexNormalsAreaWeighted, normalLines, toBufferGeometry } from "./mesh";
 
 // ---------- Renderer, scene, camera ----------
 const canvas = document.getElementById("view") as HTMLCanvasElement;
@@ -101,41 +101,96 @@ for (const [id, key] of [["lampX", "fx"], ["lampZ", "fz"]] as const) {
 }
 
 // ---------- Equipment ----------
-// Each piece becomes a THREE.Group of its parts. Every part also gets a wireframe
-// overlay (hidden by default) so the triangles of our meshes can be shown in the report.
-const wireframes: THREE.LineSegments[] = [];
+// Each piece becomes a THREE.Group of its parts. For every part we keep its FVMesh,
+// so its normals can be recomputed when the user switches the normal method (Part 4).
+// Every part also gets two debug overlays (hidden by default):
+//   - its triangles (wireframe)            — Part 3
+//   - its vertex normals as short lines    — Part 4
+interface ScenePart {
+  mesh: FVMesh;
+  geometry: THREE.BufferGeometry;
+  wire: THREE.LineSegments;
+  normalViz: THREE.LineSegments;
+}
+const sceneParts: ScenePart[] = [];
+const equipmentGroups: { name: string; group: THREE.Group }[] = [];
 const statsLines: string[] = [];
+const normalVizMaterial = new THREE.LineBasicMaterial({ color: 0xffd479 });
+
 for (const placed of DEFAULT_LAYOUT) {
   const type = CATALOGUE.find((t) => t.name === placed.type)!;
   const group = new THREE.Group();
   let nVerts = 0, nFaces = 0;
   for (const p of type.build()) {
-    const geometry = toBufferGeometry(p.mesh, vertexNormalsAverage(p.mesh));
+    const normals = vertexNormalsAverage(p.mesh); // replaced by applyNormalMethod() below
+    const geometry = toBufferGeometry(p.mesh, normals);
     group.add(new THREE.Mesh(geometry, p.material));
     const wire = new THREE.LineSegments(
       new THREE.WireframeGeometry(geometry),
       new THREE.LineBasicMaterial({ color: 0x7fd1ff })
     );
+    const normalViz = new THREE.LineSegments(normalLines(p.mesh, normals, 6), normalVizMaterial);
     wire.visible = false;
-    wireframes.push(wire);
-    group.add(wire);
+    normalViz.visible = false;
+    group.add(wire, normalViz);
+    sceneParts.push({ mesh: p.mesh, geometry, wire, normalViz });
     nVerts += p.mesh.vertices.length;
     nFaces += p.mesh.faces.length;
   }
   group.position.set(placed.x, 0, placed.z); // footprint centre on the floor
   scene.add(group);
+  equipmentGroups.push({ name: type.name, group });
   statsLines.push(`${type.name}: ${nVerts} vertices, ${nFaces} triangles`);
 }
 (document.getElementById("meshStats") as HTMLDivElement).innerHTML = statsLines.join("<br>");
 const wireBox = document.getElementById("showWire") as HTMLInputElement;
-wireBox.addEventListener("change", () => wireframes.forEach((w) => (w.visible = wireBox.checked)));
+wireBox.addEventListener("change", () => sceneParts.forEach((p) => (p.wire.visible = wireBox.checked)));
+const normalsBox = document.getElementById("showNormals") as HTMLInputElement;
+normalsBox.addEventListener("change", () => sceneParts.forEach((p) => (p.normalViz.visible = normalsBox.checked)));
+
+/**
+ * Recomputes the vertex normals of every part with the chosen method (Mesh slide 11)
+ * and sends them to the GPU. Positions and faces do not change — only the normals.
+ */
+function applyNormalMethod(method: "average" | "area"): void {
+  for (const p of sceneParts) {
+    const normals = method === "area" ? vertexNormalsAreaWeighted(p.mesh) : vertexNormalsAverage(p.mesh);
+    const attr = p.geometry.getAttribute("normal") as THREE.BufferAttribute;
+    normals.forEach((n, i) => attr.setXYZ(i, n.x, n.y, n.z));
+    attr.needsUpdate = true; // tell three.js to upload the new values
+    p.normalViz.geometry.dispose();
+    p.normalViz.geometry = normalLines(p.mesh, normals, 6);
+  }
+}
+const methodSelect = document.getElementById("normalMethod") as HTMLSelectElement;
+methodSelect.addEventListener("change", () => applyNormalMethod(methodSelect.value as "average" | "area"));
+applyNormalMethod(methodSelect.value as "average" | "area");
+
+// ---------- "Look at" — move the camera to one piece of equipment ----------
+// Makes close-up comparisons easy (and repeatable for the report screenshots).
+const lookSelect = document.getElementById("lookAt") as HTMLSelectElement;
+for (const e of equipmentGroups) lookSelect.add(new Option(e.name, e.name));
+lookSelect.addEventListener("change", () => {
+  if (lookSelect.value === "room") { resetCamera(); return; }
+  const e = equipmentGroups.find((g) => g.name === lookSelect.value)!;
+  const box = new THREE.Box3().setFromObject(e.group);        // around the piece
+  const centre = box.getCenter(new THREE.Vector3());
+  const radius = box.getSize(new THREE.Vector3()).length() / 2;
+  controls.target.copy(centre);
+  camera.position.copy(centre).add(new THREE.Vector3(1.0, 0.6, 1.2).normalize().multiplyScalar(radius * 2.2));
+  controls.update();
+});
 
 // ---------- Start ----------
 rebuildRoom();
 updateLamp();
-// Start the camera in front of the open corner, a bit above head height.
-camera.position.set(room.length * 1.35, room.height * 1.6, room.width * 1.9);
-controls.update();
+/** Puts the camera in front of the open corner of the room, a bit above head height. */
+function resetCamera(): void {
+  controls.target.set(room.length / 2, room.height / 3, room.width / 2);
+  camera.position.set(room.length * 1.35, room.height * 1.6, room.width * 1.9);
+  controls.update();
+}
+resetCamera();
 
 /** Keeps the canvas size and camera aspect ratio equal to the window. */
 function resize(): void {

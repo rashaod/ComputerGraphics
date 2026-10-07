@@ -129,6 +129,36 @@ export function vertexNormalsAverage(m: FVMesh): THREE.Vector3[] {
   return normals.map((n) => n.normalize());
 }
 
+/**
+ * Vertex normals as the AREA-WEIGHTED average of the incident face normals
+ * (Mesh slide 11: "What if some faces are larger than others?
+ *  Vertex normal is weighted average of incident face normals. Weights are face areas").
+ *
+ * The trick: the length of the cross product of two edges is TWICE the triangle's area,
+ *   |(v_j − v_i) × (v_k − v_i)| = 2 · Area
+ * so adding the cross product WITHOUT normalizing it already weights each face by its area.
+ * The only difference from vertexNormalsAverage() is the missing .normalize() on the face normal.
+ */
+export function vertexNormalsAreaWeighted(m: FVMesh): THREE.Vector3[] {
+  const normals = m.vertices.map(() => new THREE.Vector3());
+  for (const [i, j, k] of m.faces) {
+    const e1 = m.vertices[j].clone().sub(m.vertices[i]);
+    const e2 = m.vertices[k].clone().sub(m.vertices[i]);
+    const weightedNormal = e1.cross(e2); // length = 2 · area → big faces count more
+    normals[i].add(weightedNormal);
+    normals[j].add(weightedNormal);
+    normals[k].add(weightedNormal);
+  }
+  return normals.map((n) => n.normalize());
+}
+
+/** Short line segments from every vertex along its normal (debug view, like hw3 Part 4). */
+export function normalLines(m: FVMesh, normals: THREE.Vector3[], length: number): THREE.BufferGeometry {
+  const pts: THREE.Vector3[] = [];
+  m.vertices.forEach((v, i) => pts.push(v, v.clone().addScaledVector(normals[i], length)));
+  return new THREE.BufferGeometry().setFromPoints(pts);
+}
+
 /** Converts our face-vertex mesh into the arrays the GPU needs (positions, normals, indices). */
 export function toBufferGeometry(m: FVMesh, normals: THREE.Vector3[]): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();

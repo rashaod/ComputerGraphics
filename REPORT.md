@@ -116,4 +116,41 @@ The sizes are typical catalogue sizes, not one specific product.
 ### Limitations
 - The equipment is simplified: straight boxes and round cylinders only (no curved frames, cables or screens).
 - The layout is fixed for now (designed for a 400 × 350 cm room). If the room is made smaller, equipment can stick out of the walls — nothing checks this yet (Part 7).
-- With plain-average normals, vertices on the cylinder rims get a normal halfway between the side and the cap, which darkens the edges of round parts. This is examined and fixed in Part 4.
+- With plain-average normals, a vertex on a cylinder rim gets a normal tilted between the round side and the flat cap, even though the side is much larger than the thin cap triangles. Part 4 examines this and compares it with area weighting.
+
+---
+
+## Part 4 — Area-weighted vertex normals
+
+### Approach
+Mesh slide 11 says vertex normals are "not even defined" and that there is "no correct answer", only estimates. It gives two:
+1. **Plain average** of the normals of the faces around the vertex (what hw3/hw5 and Part 3 used).
+2. **Weighted average**, where each face normal is weighted by the **face's area** — the slide's answer to "what if some faces are larger than others?".
+
+Our cylinders are exactly that case: a vertex on the rim of a cylinder touches **3 long side triangles** and **2 thin cap triangles** (see the "spokes" in the Part 3 wireframe). With the plain average, every triangle counts the same, so the result depends on *how many* triangles of each kind there are, not on how big they are.
+
+Implementation (`vertexNormalsAreaWeighted` in `src/mesh.ts`): the length of the cross product of two edges is twice the triangle's area,
+`|(v_j − v_i) × (v_k − v_i)| = 2 · Area`,
+so adding the cross product **without normalizing it** already weights each face by its area. The area-weighted function is identical to the plain one except for one missing `.normalize()`.
+
+UI additions:
+- a selector **Plain average / Area-weighted average** that recomputes the normals of every part and uploads only the normal buffer to the GPU (positions and faces stay the same);
+- **Show vertex normals**: short yellow lines from every vertex along its normal (the same debug idea as hw3 Part 4);
+- **Look at**: moves the camera to one piece, so close-ups are repeatable for the report.
+
+**Relation to the homework:** hw3 computed vertex normals with the plain average only. This part adds the weighted version from the slide and shows, on our own meshes, *when* the two give different results.
+
+### Result
+![Flywheel of the exercise bike: plain average vs area-weighted](./assets/part4_flywheel.jpg)
+
+*The flywheel is a flat disc 6 cm thick with radius 25 cm, so its two caps are much bigger than its thin rim. **Plain average (left):** the rim normals lean far out to the side (bottom-left, yellow lines), so the flat face is shaded like a dome, with a highlight band across it. **Area-weighted (right):** the big cap triangles dominate, the rim normals point almost straight out of the face, and the disc looks flat, as it is.*
+
+![Weight plates on the squat rack: plain average vs area-weighted](./assets/part4_plates.jpg)
+
+*Same effect on the 4 cm thick plates: with the plain average they look like round "pillows"; area-weighted they look like flat plates.*
+
+**What did not change:** boxes look the same with both methods, because each side of a box has its own vertices (Part 3), so every vertex touches only triangles of one flat side. The long thin cylinders (rollers, handlebar, barbell) also change very little: there the big side triangles already outnumber the cap triangles.
+
+### Limitations
+- Area weighting is still an estimate, not "the" correct normal. On the flywheel it makes the flat face correct, but now the thin round edge is shaded almost as if it were flat too. The truly correct fix for a sharp rim is to **not share** the rim vertices between the side and the cap (per-vertex-per-face normals, Shading slide 27), as we already do for boxes. We kept the shared rim on purpose to be able to show this comparison.
+- Area-weighted is the default from now on.
