@@ -5,6 +5,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildRoom, Room } from "./room";
 import { lightUniforms } from "./phong";
 import { CATALOGUE, DEFAULT_LAYOUT } from "./equipment";
+import { PlacedItem, itemBox, applyPlacement, footprint } from "./placement";
+import { linePlaneIntersection, lineSphereHit, lineBoxT } from "./geometry";
 import { FVMesh, vertexNormalsAverage, vertexNormalsAreaWeighted, normalLines, toBufferGeometry } from "./mesh";
 
 // ---------- Renderer, scene, camera ----------
@@ -114,60 +116,89 @@ for (const [id, key] of [["lampX", "fx"], ["lampZ", "fz"]] as const) {
 }
 
 // ---------- Equipment ----------
-// Each piece becomes a THREE.Group of its parts. For every part we keep its FVMesh,
-// so its normals can be recomputed when the user switches the normal method (Part 4).
-// Every part also gets two debug overlays (hidden by default):
+// Every placed piece is a PlacedItem (placement.ts) with a THREE.Group of its parts.
+// For every part we keep its FVMesh, so its normals can be recomputed when the user
+// switches the normal method (Part 4). Every part also gets two debug overlays:
 //   - its triangles (wireframe)            — Part 3
 //   - its vertex normals as short lines    — Part 4
 interface ScenePart {
+  itemId: number;
   mesh: FVMesh;
   geometry: THREE.BufferGeometry;
   wire: THREE.LineSegments;
   normalViz: THREE.LineSegments;
 }
-const sceneParts: ScenePart[] = [];
-const equipmentGroups: { name: string; group: THREE.Group }[] = [];
-const statsLines: string[] = [];
+let sceneParts: ScenePart[] = [];
+let items: PlacedItem[] = [];
+let nextId = 1;
 const normalVizMaterial = new THREE.LineBasicMaterial({ color: 0xffd479 });
+const wireBox = document.getElementById("showWire") as HTMLInputElement;
+const normalsBox = document.getElementById("showNormals") as HTMLInputElement;
+const methodSelect = document.getElementById("normalMethod") as HTMLSelectElement;
 
-for (const placed of DEFAULT_LAYOUT) {
-  const type = CATALOGUE.find((t) => t.name === placed.type)!;
-  const group = new THREE.Group();
-  let nVerts = 0, nFaces = 0;
+/** Vertex normals with the method chosen in the panel (Part 4). */
+function computeNormals(m: FVMesh): THREE.Vector3[] {
+  return methodSelect.value === "area" ? vertexNormalsAreaWeighted(m) : vertexNormalsAverage(m);
+}
+
+/** Builds one piece of equipment, adds it to the scene and returns it. */
+function addItem(typeName: string, x: number, z: number, turned = false): PlacedItem {
+  const type = CATALOGUE.find((t) => t.name === typeName)!;
+  const item: PlacedItem = { id: nextId++, type, group: new THREE.Group(), x, z, turned };
   for (const p of type.build()) {
-    const normals = vertexNormalsAverage(p.mesh); // replaced by applyNormalMethod() below
+    const normals = computeNormals(p.mesh);
     const geometry = toBufferGeometry(p.mesh, normals);
-    group.add(new THREE.Mesh(geometry, p.material));
+    item.group.add(new THREE.Mesh(geometry, p.material));
     const wire = new THREE.LineSegments(
       new THREE.WireframeGeometry(geometry),
       new THREE.LineBasicMaterial({ color: 0x7fd1ff })
     );
     const normalViz = new THREE.LineSegments(normalLines(p.mesh, normals, 6), normalVizMaterial);
-    wire.visible = false;
-    normalViz.visible = false;
-    group.add(wire, normalViz);
-    sceneParts.push({ mesh: p.mesh, geometry, wire, normalViz });
-    nVerts += p.mesh.vertices.length;
-    nFaces += p.mesh.faces.length;
+    wire.visible = wireBox.checked;
+    normalViz.visible = normalsBox.checked;
+    item.group.add(wire, normalViz);
+    sceneParts.push({ itemId: item.id, mesh: p.mesh, geometry, wire, normalViz });
   }
-  group.position.set(placed.x, 0, placed.z); // footprint centre on the floor
-  scene.add(group);
-  equipmentGroups.push({ name: type.name, group });
-  statsLines.push(`${type.name}: ${nVerts} vertices, ${nFaces} triangles`);
+  applyPlacement(item);
+  scene.add(item.group);
+  items.push(item);
+  return item;
 }
-(document.getElementById("meshStats") as HTMLDivElement).innerHTML = statsLines.join("<br>");
-const wireBox = document.getElementById("showWire") as HTMLInputElement;
+
+/** Removes a piece from the scene and frees its GPU memory. */
+function removeItem(item: PlacedItem): void {
+  scene.remove(item.group);
+  item.group.traverse((o) => {
+    if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) o.geometry.dispose();
+  });
+  sceneParts = sceneParts.filter((p) => p.itemId !== item.id);
+  items = items.filter((i) => i !== item);
+}
+
+for (const placed of DEFAULT_LAYOUT) addItem(placed.type, placed.x, placed.z);
+
+/** The vertex/triangle counts in the panel (Part 3). */
+function updateStats(): void {
+  const lines = items.map((it) => {
+    const parts = sceneParts.filter((p) => p.itemId === it.id);
+    const v = parts.reduce((n, p) => n + p.mesh.vertices.length, 0);
+    const f = parts.reduce((n, p) => n + p.mesh.faces.length, 0);
+    return `${it.type.name}: ${v} vertices, ${f} triangles`;
+  });
+  (document.getElementById("meshStats") as HTMLDivElement).innerHTML = lines.join("<br>");
+}
+updateStats();
+
 wireBox.addEventListener("change", () => sceneParts.forEach((p) => (p.wire.visible = wireBox.checked)));
-const normalsBox = document.getElementById("showNormals") as HTMLInputElement;
 normalsBox.addEventListener("change", () => sceneParts.forEach((p) => (p.normalViz.visible = normalsBox.checked)));
 
 /**
  * Recomputes the vertex normals of every part with the chosen method (Mesh slide 11)
  * and sends them to the GPU. Positions and faces do not change — only the normals.
  */
-function applyNormalMethod(method: "average" | "area"): void {
+function applyNormalMethod(): void {
   for (const p of sceneParts) {
-    const normals = method === "area" ? vertexNormalsAreaWeighted(p.mesh) : vertexNormalsAverage(p.mesh);
+    const normals = computeNormals(p.mesh);
     const attr = p.geometry.getAttribute("normal") as THREE.BufferAttribute;
     normals.forEach((n, i) => attr.setXYZ(i, n.x, n.y, n.z));
     attr.needsUpdate = true; // tell three.js to upload the new values
@@ -175,18 +206,172 @@ function applyNormalMethod(method: "average" | "area"): void {
     p.normalViz.geometry = normalLines(p.mesh, normals, 6);
   }
 }
-const methodSelect = document.getElementById("normalMethod") as HTMLSelectElement;
-methodSelect.addEventListener("change", () => applyNormalMethod(methodSelect.value as "average" | "area"));
-applyNormalMethod(methodSelect.value as "average" | "area");
+methodSelect.addEventListener("change", applyNormalMethod);
+
+// ---------- Part 6: selecting, adding, moving, turning ----------
+let selected: PlacedItem | null = null;
+
+// The selected piece is outlined with its BOX (the box all later checks use).
+const selectionOutline = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+  new THREE.LineBasicMaterial({ color: 0xffd479 })
+);
+selectionOutline.visible = false;
+scene.add(selectionOutline);
+
+/** Moves the yellow outline onto the selected item's box and refreshes the info text. */
+function updateSelectionView(): void {
+  const info = document.getElementById("selInfo") as HTMLDivElement;
+  if (!selected) {
+    selectionOutline.visible = false;
+    info.textContent = "Nothing selected — click a piece of equipment.";
+    return;
+  }
+  const { min, max } = itemBox(selected);
+  selectionOutline.visible = true;
+  selectionOutline.scale.copy(max.clone().sub(min));                 // unit cube → box size
+  selectionOutline.position.copy(min.clone().add(max).multiplyScalar(0.5)); // → box centre
+  const f = footprint(selected);
+  info.innerHTML = `<b>${selected.type.name}</b><br>centre x = ${selected.x} cm, z = ${selected.z} cm<br>` +
+    `box ${f.sizeX} × ${f.sizeZ} × ${f.height} cm${selected.turned ? " (turned 90°)" : ""}`;
+}
+function select(item: PlacedItem | null): void {
+  selected = item;
+  updateSelectionView();
+}
+
+/** Positions are rounded to 5 cm so that values are easy to read and to type into a report. */
+const snap = (v: number) => Math.round(v / 5) * 5;
+
+/**
+ * The line through the camera and the mouse pixel, in PARAMETRIC FORM (slide 15):
+ *   f(t) = (1 − t)·P1 + t·P2
+ * P1 is the pixel on the near plane, P2 the same pixel on the far plane
+ * (unproject = the inverse of the projection we built in hw3).
+ */
+function mouseLine(ev: PointerEvent): { P1: THREE.Vector3; P2: THREE.Vector3 } {
+  const r = canvas.getBoundingClientRect();
+  const ndcX = ((ev.clientX - r.left) / r.width) * 2 - 1;  // pixel → normalized device coords
+  const ndcY = -((ev.clientY - r.top) / r.height) * 2 + 1;
+  return {
+    P1: new THREE.Vector3(ndcX, ndcY, -1).unproject(camera),
+    P2: new THREE.Vector3(ndcX, ndcY, 1).unproject(camera),
+  };
+}
+
+/**
+ * Picking: which piece is under the mouse? Two steps, as in "Collision Detection" (slide 21:
+ * "needs to be efficient and accurate"):
+ *   1. QUICK REJECT with a bounding sphere (centre of the box, radius = half its diagonal)
+ *      and the line–sphere test of slide 24. Most pieces are rejected here.
+ *   2. EXACT TEST with the piece's box: lineBoxT (built from line–plane intersections, slide 20).
+ * If several boxes are hit, the one the line enters first (smallest t) is nearest to the camera.
+ */
+function pick(P1: THREE.Vector3, P2: THREE.Vector3): PlacedItem | null {
+  let best: PlacedItem | null = null;
+  let bestT = Infinity;
+  for (const it of items) {
+    const { min, max } = itemBox(it);
+    const centre = min.clone().add(max).multiplyScalar(0.5);
+    const R = max.clone().sub(min).length() / 2;
+    if (!lineSphereHit(P1, P2, centre, R).hit) continue; // step 1: cannot be under the mouse
+    const t = lineBoxT(P1, P2, min, max);                 // step 2: exact box test
+    if (t !== null && t < bestT) { best = it; bestT = t; }
+  }
+  return best;
+}
+
+// The floor is the plane y = 0, i.e. A·x + B·y + C·z + D = 0 with n = (0, 1, 0), D = 0 (slide 20).
+const FLOOR_N = new THREE.Vector3(0, 1, 0);
+const FLOOR_D = 0;
+let dragOffset: THREE.Vector3 | null = null; // where on the piece the user grabbed it
+
+canvas.addEventListener("pointerdown", (ev) => {
+  if (ev.button !== 0) return; // left button only; right button still pans the camera
+  const { P1, P2 } = mouseLine(ev);
+  const hit = pick(P1, P2);
+  select(hit);
+  if (!hit) return;                     // empty space: let OrbitControls rotate the camera
+  const onFloor = linePlaneIntersection(P1, P2, FLOOR_N, FLOOR_D);
+  if (!onFloor) return;
+  dragOffset = new THREE.Vector3(hit.x, 0, hit.z).sub(onFloor);
+  controls.enabled = false;             // while dragging, the camera must not move
+  canvas.setPointerCapture(ev.pointerId);
+});
+
+canvas.addEventListener("pointermove", (ev) => {
+  if (!selected || !dragOffset) return;
+  const { P1, P2 } = mouseLine(ev);
+  // Dragging = intersecting the mouse line with the floor plane (slides 15 + 20).
+  const onFloor = linePlaneIntersection(P1, P2, FLOOR_N, FLOOR_D);
+  if (!onFloor) return;
+  selected.x = snap(onFloor.x + dragOffset.x);
+  selected.z = snap(onFloor.z + dragOffset.z);
+  applyPlacement(selected);
+  updateSelectionView();
+});
+
+const endDrag = () => { dragOffset = null; controls.enabled = true; };
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
+
+/** Turns the selected piece by 90° around its own centre. */
+function turnSelected(): void {
+  if (!selected) return;
+  selected.turned = !selected.turned;
+  applyPlacement(selected);
+  updateSelectionView();
+}
+function deleteSelected(): void {
+  if (!selected) return;
+  removeItem(selected);
+  select(null);
+  updateStats();
+}
+
+// Panel: add a new piece in the middle of the room, turn, delete.
+const addSelect = document.getElementById("addType") as HTMLSelectElement;
+for (const t of CATALOGUE) addSelect.add(new Option(t.name, t.name));
+document.getElementById("addBtn")!.addEventListener("click", () => {
+  const it = addItem(addSelect.value, snap(room.length / 2), snap(room.width / 2));
+  select(it);
+  updateStats();
+  refreshLookAt();
+});
+document.getElementById("turnBtn")!.addEventListener("click", turnSelected);
+document.getElementById("deleteBtn")!.addEventListener("click", () => { deleteSelected(); refreshLookAt(); });
+
+// Keyboard: arrows move the selected piece by 5 cm (like hw2's arrow keys), R turns, Delete removes.
+window.addEventListener("keydown", (ev) => {
+  if (!selected || (ev.target as HTMLElement).tagName === "SELECT") return;
+  const step: Record<string, [number, number]> = {
+    ArrowLeft: [-5, 0], ArrowRight: [5, 0], ArrowUp: [0, -5], ArrowDown: [0, 5],
+  };
+  if (step[ev.key]) {
+    selected.x += step[ev.key][0];
+    selected.z += step[ev.key][1];
+    applyPlacement(selected);
+    updateSelectionView();
+    ev.preventDefault();
+  } else if (ev.key === "r" || ev.key === "R") turnSelected();
+  else if (ev.key === "Delete") { deleteSelected(); refreshLookAt(); }
+});
+updateSelectionView();
 
 // ---------- "Look at" — move the camera to one piece of equipment ----------
 // Makes close-up comparisons easy (and repeatable for the report screenshots).
 const lookSelect = document.getElementById("lookAt") as HTMLSelectElement;
-for (const e of equipmentGroups) lookSelect.add(new Option(e.name, e.name));
+/** Rebuilds the "Look at" list from the pieces currently in the room. */
+function refreshLookAt(): void {
+  while (lookSelect.options.length > 1) lookSelect.remove(1);
+  for (const it of items) lookSelect.add(new Option(`${it.type.name} #${it.id}`, String(it.id)));
+}
+refreshLookAt();
 lookSelect.addEventListener("change", () => {
   if (lookSelect.value === "room") { resetCamera(); return; }
-  const e = equipmentGroups.find((g) => g.name === lookSelect.value)!;
-  const box = new THREE.Box3().setFromObject(e.group);        // around the piece
+  const it = items.find((i) => String(i.id) === lookSelect.value);
+  if (!it) return;
+  const box = new THREE.Box3().setFromObject(it.group);        // around the piece
   const centre = box.getCenter(new THREE.Vector3());
   const radius = box.getSize(new THREE.Vector3()).length() / 2;
   controls.target.copy(centre);

@@ -190,3 +190,33 @@ Implementation (`src/phong.ts`):
 - Gouraud makes the equipment look slightly duller overall; that is the method, not a bug, but it means screenshots from the two modes are not directly comparable in brightness.
 - The floor tessellation choice affects only the floor; the equipment meshes keep their resolution.
 - Phong shading is the default because the planner runs comfortably in real time with it on this scene (a few thousand triangles).
+
+---
+
+## Part 6 — Placing, moving and turning equipment
+
+### Approach
+This is where the viewer becomes a planner: pieces can be **selected with the mouse, dragged across the floor, turned by 90°, added and deleted**. Each placed piece is a `PlacedItem` (`src/placement.ts`): its type, the centre of its footprint `(x, z)` in cm, and `turned` (0° or 90°). `itemBox()` turns this into the piece's axis-aligned box — the same box that is outlined in yellow when the piece is selected, and the box all checks in Parts 7–9 will use.
+
+All the mouse work is done with the line and plane formulas from the *Basic Geometry* lecture (`src/geometry.ts`):
+
+1. **The mouse as a line (slide 15).** The pixel under the mouse is turned into a line through the camera in *parametric form*, `f(t) = (1 − t)·P1 + t·P2`, where `P1` is that pixel on the near plane and `P2` the same pixel on the far plane. (`unproject` is the inverse of the perspective projection we wrote in hw3.)
+2. **Picking — what did the user click?** Two steps, following the *Collision Detection* slide (21: "needs to be efficient and accurate"):
+   - *Quick reject:* every piece is wrapped in a bounding sphere, and the line is tested with the **line–sphere test of slide 24** ("find distance from line to center of sphere; if it is less than R, there is an intersection"). The distance itself is the **point–line distance of slide 16**, `‖QP1 × QP2‖ / ‖P1P2‖`.
+   - *Exact test:* for the pieces that pass, the line is tested against the piece's box. `lineBoxT` intersects the line with the plane of each of the 6 sides (**line–plane intersection** with the plane equation `Ax + By + Cz + D = 0` of slide 20) and checks whether the point lies inside that side's rectangle. The piece whose box is entered first (smallest `t`) is the one nearest the camera.
+3. **Dragging.** While the button is held, the mouse line is intersected with the **floor plane** `y = 0` (`n = (0, 1, 0)`, `D = 0`, slide 20). The piece's centre follows that point (keeping the offset of where it was grabbed), rounded to 5 cm so positions are easy to read. The camera is frozen during a drag.
+4. **Turning** swaps the footprint's length and width and rotates the meshes by 90° around the piece's centre. Arrow keys move the selection in 5 cm steps (like the arrow-key translation in hw2), `R` turns and `Delete` removes.
+
+**Why both a sphere and a box?** The first version used only bounding spheres. Testing it by clicking 9 points in the scene, 3 clicks selected the wrong piece — for example, clicking the treadmill belt selected the yoga mat, because the flat mat's sphere (radius ≈ 95 cm) reaches far above the mat. With the exact box test added, all 9 test clicks selected the right piece. The sphere is kept as the cheap first step.
+
+**Relation to the homework:** hw2–hw3 moved one model with sliders and keys in its own coordinate frame. Here the user manipulates several objects directly in the 3D view, which needs the inverse direction: from a 2D pixel back to a 3D line, and from that line to a point on the floor.
+
+### Result
+![Selecting, dragging and turning the bench](./assets/part6_move.jpg)
+
+*Left: clicking the bench selects it; the yellow outline is its 120 × 50 × 45 cm box, and the panel shows its centre. Right: the bench dragged to the left and turned 90° (now 50 × 120 cm). It now overlaps the exercise bike — nothing checks that yet; Part 8 will.*
+
+### Limitations
+- Only 90° turns. Free rotation would make the boxes non-axis-aligned and need a different overlap test that is not in the lectures.
+- Picking uses each piece's whole box, so clicking the empty space *inside* the squat rack frame selects the rack, not the piece behind it.
+- Pieces can be dragged through walls and out of the room on purpose — the planner should *show* the problem rather than hide it (Part 7).
