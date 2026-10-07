@@ -1,0 +1,12 @@
+html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d25; font-family: system-ui, sans-serif; }
+#view { display: block; width: 100%; height: 100%; }
+#panel {
+  position: absolute; top: 12px; right: 12px; width: 240px;
+  background: rgba(40, 44, 58, 0.92); color: #e6e6ee;
+  padding: 12px 14px; border-radius: 8px; font-size: 13px;
+}
+#panel h1 { font-size: 16px; margin: 0 0 8px; }
+#panel h2 { font-size: 13px; margin: 12px 0 4px; color: #9fb4ff; }
+#panel label { display: block; margin: 6px 0; }
+#panel input[type=range] { width: 100%; }
+#panel span { float: right; color: #ffd479; }

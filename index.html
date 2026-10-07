@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Home-Gym Planner</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- The 3D view. three.js draws into this canvas. -->
+    <canvas id="view"></canvas>
+
+    <!-- Control panel (plain HTML, no UI library). -->
+    <div id="panel">
+      <h1>Home-Gym Planner</h1>
+
+      <h2>Room (cm)</h2>
+      <label>Length (X) <span id="lengthVal"></span>
+        <input id="length" type="range" min="200" max="800" step="10" value="400" /></label>
+      <label>Width (Z) <span id="widthVal"></span>
+        <input id="width" type="range" min="200" max="800" step="10" value="350" /></label>
+      <label>Height (Y) <span id="heightVal"></span>
+        <input id="height" type="range" min="200" max="350" step="5" value="250" /></label>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
