@@ -11,3 +11,4 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d25; fon
 #panel input[type=checkbox] { vertical-align: middle; margin: 0 6px 0 0; }
 #panel input[type=range] { width: 100%; }
 #panel span { float: right; color: #ffd479; }
+#panel .stats { font-size: 11px; color: #b8bccb; line-height: 1.5; }

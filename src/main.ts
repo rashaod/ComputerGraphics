@@ -4,6 +4,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildRoom, Room } from "./room";
 import { lightUniforms } from "./phong";
+import { CATALOGUE, DEFAULT_LAYOUT } from "./equipment";
+import { vertexNormalsAverage, toBufferGeometry } from "./mesh";
 
 // ---------- Renderer, scene, camera ----------
 const canvas = document.getElementById("view") as HTMLCanvasElement;
@@ -97,6 +99,36 @@ for (const [id, key] of [["lampX", "fx"], ["lampZ", "fz"]] as const) {
   input.addEventListener("input", update);
   update();
 }
+
+// ---------- Equipment ----------
+// Each piece becomes a THREE.Group of its parts. Every part also gets a wireframe
+// overlay (hidden by default) so the triangles of our meshes can be shown in the report.
+const wireframes: THREE.LineSegments[] = [];
+const statsLines: string[] = [];
+for (const placed of DEFAULT_LAYOUT) {
+  const type = CATALOGUE.find((t) => t.name === placed.type)!;
+  const group = new THREE.Group();
+  let nVerts = 0, nFaces = 0;
+  for (const p of type.build()) {
+    const geometry = toBufferGeometry(p.mesh, vertexNormalsAverage(p.mesh));
+    group.add(new THREE.Mesh(geometry, p.material));
+    const wire = new THREE.LineSegments(
+      new THREE.WireframeGeometry(geometry),
+      new THREE.LineBasicMaterial({ color: 0x7fd1ff })
+    );
+    wire.visible = false;
+    wireframes.push(wire);
+    group.add(wire);
+    nVerts += p.mesh.vertices.length;
+    nFaces += p.mesh.faces.length;
+  }
+  group.position.set(placed.x, 0, placed.z); // footprint centre on the floor
+  scene.add(group);
+  statsLines.push(`${type.name}: ${nVerts} vertices, ${nFaces} triangles`);
+}
+(document.getElementById("meshStats") as HTMLDivElement).innerHTML = statsLines.join("<br>");
+const wireBox = document.getElementById("showWire") as HTMLInputElement;
+wireBox.addEventListener("change", () => wireframes.forEach((w) => (w.visible = wireBox.checked)));
 
 // ---------- Start ----------
 rebuildRoom();
