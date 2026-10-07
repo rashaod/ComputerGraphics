@@ -26,6 +26,7 @@ const controls = new OrbitControls(camera, canvas);
 
 // ---------- Room state ----------
 const room: Room = { length: 400, width: 350, height: 250 };
+let floorSegments = 1; // Part 5: how many squares per floor side (2 triangles each)
 let roomGroup: THREE.Group | null = null;
 
 /** Throws away the old room meshes and builds new ones with the current size. */
@@ -37,7 +38,7 @@ function rebuildRoom(): void {
       if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments) obj.geometry.dispose();
     });
   }
-  roomGroup = buildRoom(room);
+  roomGroup = buildRoom(room, floorSegments);
   scene.add(roomGroup);
   // Always orbit around the centre of the room.
   controls.target.set(room.length / 2, room.height / 3, room.width / 2);
@@ -86,6 +87,18 @@ for (const id of ["useAmbient", "useDiffuse", "useSpecular"] as const) {
   const box = document.getElementById(id) as HTMLInputElement;
   box.addEventListener("change", () => { lightUniforms[id].value = box.checked; });
 }
+
+// Part 5 — shading mode: Phong (per pixel) or Gouraud (per vertex).
+const shadingSelect = document.getElementById("shading") as HTMLSelectElement;
+shadingSelect.addEventListener("change", () => {
+  lightUniforms.useGouraud.value = shadingSelect.value === "gouraud";
+});
+// Part 5 — floor tessellation: more vertices = more places where Gouraud evaluates the light.
+const floorSelect = document.getElementById("floorSegments") as HTMLSelectElement;
+floorSelect.addEventListener("change", () => {
+  floorSegments = Number(floorSelect.value);
+  rebuildRoom();
+});
 
 // Lamp position sliders (fraction of the room's length / width).
 for (const [id, key] of [["lampX", "fx"], ["lampZ", "fz"]] as const) {

@@ -5,6 +5,9 @@
 // Built-in materials hide the lighting math. Here every term of the slide formula
 // appears in the code with the slide's own names, so it can be explained line by line.
 //
+// Since Part 5 the same equation can be evaluated per pixel (Phong shading) or
+// per vertex (Gouraud shading) — see `useGouraud`.
+//
 // All lighting vectors are computed in WORLD space (positions, normals, light, camera),
 // so no vector from one coordinate system is ever mixed with a vector from another.
 
@@ -31,44 +34,28 @@ export const lightUniforms = {
   useAmbient: { value: true },  // switches for before/after pictures in the report
   useDiffuse: { value: true },
   useSpecular: { value: true },
+  // Part 5: where the illumination equation is evaluated (Shading slides 25–29).
+  //   false → PHONG shading:   once per PIXEL, with the interpolated normal
+  //   true  → GOURAUD shading: once per VERTEX, then the COLOR is interpolated
+  useGouraud: { value: false },
 };
 
-// ---------- Vertex shader: runs once per vertex ----------
-// It only moves data into world space and hands it to the fragment shader.
-const vertexShader = /* glsl */ `
-  varying vec3 vWorldPos;    // surface point p, world space
-  varying vec3 vWorldNormal; // normal n, world space
-
-  void main() {
-    vec4 world = modelMatrix * vec4(position, 1.0);
-    vWorldPos = world.xyz;
-    // Normals are transformed by the inverse-transpose of the model matrix,
-    // so they stay perpendicular to the surface even after non-uniform scaling.
-    vWorldNormal = normalize(transpose(inverse(mat3(modelMatrix))) * normal);
-    gl_Position = projectionMatrix * viewMatrix * world;
-  }
-`;
-
-// ---------- Fragment shader: runs once per pixel ----------
-// Evaluates I = I_a + I_d + I_s (slide 22) for this pixel.
-const fragmentShader = /* glsl */ `
+// ---------- The illumination equation, shared by both shaders ----------
+// The SAME function is used per-vertex (Gouraud) and per-pixel (Phong), so the
+// only difference between the two modes is WHERE it is evaluated.
+const illumination = /* glsl */ `
   uniform vec3 lightPos;
   uniform vec3 L_a, L_d, L_s;
   uniform vec3 k_a, k_d, k_s;
   uniform float alpha;
-  uniform bool useAmbient, useDiffuse, useSpecular;
+  uniform bool useAmbient, useDiffuse, useSpecular, useGouraud;
 
-  varying vec3 vWorldPos;
-  varying vec3 vWorldNormal;
-
-  void main() {
+  // p = surface point, n = unit normal (both in world space).
+  vec3 phongIllumination(vec3 p, vec3 n) {
     // Slide 13 notation — all unit vectors, all in world space:
-    vec3 n = normalize(vWorldNormal);
-    if (!gl_FrontFacing) n = -n;                    // walls can be seen from both sides
-    vec3 l = normalize(lightPos - vWorldPos);       // "l – direction to light source"
-    vec3 v = normalize(cameraPosition - vWorldPos); // "v – direction to COP" (the camera)
-    vec3 r = reflect(-l, n);                        // "r – direction of reflected ray"
-                                                    //  (= 2(l·n)n − l)
+    vec3 l = normalize(lightPos - p);       // "l – direction to light source"
+    vec3 v = normalize(cameraPosition - p); // "v – direction to COP" (the camera)
+    vec3 r = reflect(-l, n);                // "r – direction of reflected ray" (= 2(l·n)n − l)
 
     // Slide 14 — Ambient: I_a = L_a k_a
     vec3 I_a = L_a * k_a;
@@ -89,9 +76,53 @@ const fragmentShader = /* glsl */ `
     if (useAmbient)  I += I_a;
     if (useDiffuse)  I += I_d;
     if (useSpecular) I += I_s;
-
     // Slide 22: "Beware of overflows" — clamp to the displayable range [0,1].
-    gl_FragColor = vec4(clamp(I, 0.0, 1.0), 1.0);
+    return clamp(I, 0.0, 1.0);
+  }
+`;
+
+// ---------- Vertex shader: runs once per VERTEX ----------
+const vertexShader = /* glsl */ `
+  ${illumination}
+  varying vec3 vWorldPos;     // surface point p, world space   (for Phong shading)
+  varying vec3 vWorldNormal;  // normal n, world space          (for Phong shading)
+  varying vec3 vGouraudColor; // the color I at this vertex     (for Gouraud shading)
+
+  void main() {
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorldPos = world.xyz;
+    // Normals are transformed by the inverse-transpose of the model matrix,
+    // so they stay perpendicular to the surface even after non-uniform scaling.
+    vWorldNormal = normalize(transpose(inverse(mat3(modelMatrix))) * normal);
+
+    // Gouraud (slide 25): "Compute illumination intensity at vertices using normals".
+    // The GPU then linearly interpolates vGouraudColor over the triangle (slide 28).
+    vGouraudColor = useGouraud ? phongIllumination(vWorldPos, vWorldNormal) : vec3(0.0);
+
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+// ---------- Fragment shader: runs once per PIXEL ----------
+const fragmentShader = /* glsl */ `
+  ${illumination}
+  varying vec3 vWorldPos;
+  varying vec3 vWorldNormal;
+  varying vec3 vGouraudColor;
+
+  void main() {
+    vec3 I;
+    if (useGouraud) {
+      // Gouraud: just use the color interpolated between the 3 vertices.
+      I = vGouraudColor;
+    } else {
+      // Phong shading (slide 29): "Interpolate normal vectors instead of illumination
+      // intensities. Renormalize. Apply the illumination equation for each interior pixel."
+      vec3 n = normalize(vWorldNormal);    // renormalize: interpolation shortens the vector
+      if (!gl_FrontFacing) n = -n;         // walls can be seen from both sides
+      I = phongIllumination(vWorldPos, n);
+    }
+    gl_FragColor = vec4(I, 1.0);
     #include <colorspace_fragment>
   }
 `;

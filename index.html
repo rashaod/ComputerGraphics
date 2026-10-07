@@ -26,6 +26,17 @@
       <label><input id="useAmbient" type="checkbox" checked /> Ambient I<sub>a</sub></label>
       <label><input id="useDiffuse" type="checkbox" checked /> Diffuse I<sub>d</sub></label>
       <label><input id="useSpecular" type="checkbox" checked /> Specular I<sub>s</sub></label>
+      <label>Shading (slides 25–29)
+        <select id="shading">
+          <option value="phong">Phong — per pixel</option>
+          <option value="gouraud">Gouraud — per vertex</option>
+        </select></label>
+      <label>Floor triangles
+        <select id="floorSegments">
+          <option value="1">1 × 1 squares (2 triangles)</option>
+          <option value="8">8 × 8 squares (128 triangles)</option>
+          <option value="32">32 × 32 squares (2048 triangles)</option>
+        </select></label>
       <label>Lamp X <span id="lampXVal"></span>
         <input id="lampX" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
       <label>Lamp Z <span id="lampZVal"></span>

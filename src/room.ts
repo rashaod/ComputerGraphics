@@ -17,19 +17,22 @@ export interface Room {
 /**
  * Builds the visible room: a floor with a 50 cm grid, two solid back walls,
  * and a thin outline of the whole room so the ceiling height is visible.
+ * floorSegments: how finely the floor is split into triangles (Part 5).
  * Returns one THREE.Group so the caller can remove and rebuild it when a slider moves.
  *
  * Since Part 2 the floor and walls are lit by our own Phong shader (phong.ts).
  * The floor is slightly shiny (like a rubber gym floor) so the specular term is visible;
  * the walls are matte paint (k_s = 0).
  */
-export function buildRoom(room: Room): THREE.Group {
+export function buildRoom(room: Room, floorSegments = 1): THREE.Group {
   const group = new THREE.Group();
   const { length, width, height } = room;
 
   // Floor: a flat rectangle lying on y = 0.
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(length, width),
+    // floorSegments × floorSegments squares (2 triangles each). Part 5 shows that
+    // Gouraud shading needs MANY vertices to show a highlight; Phong shading does not.
+    new THREE.PlaneGeometry(length, width, floorSegments, floorSegments),
     createPhongMaterial({
       k_a: new THREE.Color(0.2, 0.21, 0.24),
       k_d: new THREE.Color(0.2, 0.21, 0.24),

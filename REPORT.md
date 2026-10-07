@@ -154,3 +154,39 @@ UI additions:
 ### Limitations
 - Area weighting is still an estimate, not "the" correct normal. On the flywheel it makes the flat face correct, but now the thin round edge is shaded almost as if it were flat too. The truly correct fix for a sharp rim is to **not share** the rim vertices between the side and the cap (per-vertex-per-face normals, Shading slide 27), as we already do for boxes. We kept the shared rim on purpose to be able to show this comparison.
 - Area-weighted is the default from now on.
+
+---
+
+## Part 5 — Gouraud vs Phong shading
+
+### Approach
+The Shading lecture separates **lighting** (the illumination equation, Part 2) from **shading** (where that equation is evaluated, slide 4). Slides 25–29 compare two answers:
+
+| | **Gouraud** (slides 25, 28) | **Phong shading** (slide 29) |
+|---|---|---|
+| Equation evaluated | once per **vertex** | once per **pixel** |
+| What is interpolated over the triangle | the resulting **color** | the **normal** (then renormalized) |
+| Where in our code | vertex shader → `vGouraudColor` | fragment shader → `normalize(vWorldNormal)` |
+
+Implementation (`src/phong.ts`):
+- The illumination equation was moved into one GLSL function, `phongIllumination(p, n)`, that is pasted into **both** shaders. The two modes therefore use exactly the same math — the only difference is *where* it runs.
+- A shared switch `useGouraud` (dropdown **Shading**) chooses the mode. In Gouraud mode the vertex shader computes the color and the GPU interpolates it linearly across the triangle (slide 28); in Phong mode the fragment shader renormalizes the interpolated normal and computes the color per pixel (slide 29).
+- To answer slide 28's question — *"Can Gouraud shading support specular lighting?"* — a second dropdown, **Floor triangles**, rebuilds the floor with 2, 128 or 2048 triangles. The floor is the shiniest large surface in the scene.
+
+**Relation to the homework:** hw5 implemented flat shading and Phong shading but not Gouraud. This part adds the missing method and compares the two on the same scene.
+
+### Result
+![Floor highlight: Phong vs Gouraud with 2, 128 and 2048 triangles](./assets/part5_floor.jpg)
+
+*Top left — Phong shading, floor of only 2 triangles: the specular highlight is round and in the right place, because the equation is evaluated at every pixel. Top right — Gouraud, same 2 triangles: **the highlight disappears**. The light is computed only at the 4 floor corners, none of which is near the highlight, and interpolating those 4 dull colors cannot create a bright spot in the middle. Bottom — Gouraud with 128 and 2048 triangles: the highlight comes back once there are vertices close enough to it, and with 2048 triangles it is close to the Phong result.*
+
+![Close-ups: plates and bench pad, Phong vs Gouraud](./assets/part5_closeups.jpg)
+
+*The same effect on the equipment: with Phong shading the black plates and the red pad show highlights; with Gouraud the plates look almost matte and the highlight on the floor in front of the bench is gone.*
+
+**Answer to slide 28's question:** Gouraud *can* show specular light, but only where the highlight falls on (or very near) a vertex. For a small, sharp highlight (large `α`) on large triangles it misses it completely. Phong shading does not depend on the mesh resolution, at the cost of running the equation for every pixel instead of every vertex.
+
+### Limitations
+- Gouraud makes the equipment look slightly duller overall; that is the method, not a bug, but it means screenshots from the two modes are not directly comparable in brightness.
+- The floor tessellation choice affects only the floor; the equipment meshes keep their resolution.
+- Phong shading is the default because the planner runs comfortably in real time with it on this scene (a few thousand triangles).
