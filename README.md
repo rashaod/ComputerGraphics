@@ -4,8 +4,8 @@
 # Computer Graphics 2026 - Course Portfolio
 
 **Student Information**
-* **Name:** [Your Name Here]
-* **Student ID:** [Your ID Here]
+* **Name:** Rasha Odeh
+* **Student ID:** 322253584
 
 ## Academic Integrity & Workflow Agreement
 
