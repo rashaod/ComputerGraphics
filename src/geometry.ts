@@ -95,3 +95,32 @@ export function lineBoxT(
 export function signedPointPlaneDistance(w: THREE.Vector3, n: THREE.Vector3, d: number): number {
   return (w.dot(n) + d) / n.length();
 }
+
+/**
+ * Distance from point Q to the SEGMENT P1–P2 (not the infinite line).
+ * Slide 19 ("What about segment-segment? Need to check end points separately"):
+ * project Q onto the line to get t; if 0 ≤ t ≤ 1 the closest point is inside the segment
+ * and the point–line distance of slide 16 applies; otherwise the closest point is an end point.
+ */
+export function pointSegmentDistance(Q: THREE.Vector3, P1: THREE.Vector3, P2: THREE.Vector3): number {
+  const d = P2.clone().sub(P1);
+  const t = Q.clone().sub(P1).dot(d) / d.dot(d);
+  if (t <= 0) return Q.distanceTo(P1);       // before P1 → the end point P1 is closest
+  if (t >= 1) return Q.distanceTo(P2);       // after P2  → the end point P2 is closest
+  return pointLineDistance(Q, P1, P2);       // in between → slide 16
+}
+
+/**
+ * Gap between a sphere (centre c, radius R) and an axis-aligned box: negative = they intersect.
+ * The point of the box closest to c is found by CLAMPING each coordinate of c into the
+ * box's range [min, max]; the sphere touches the box exactly when that point is within R.
+ * (The same "distance to the centre compared with R" idea as the line–sphere test of slide 24.)
+ */
+export function sphereBoxGap(c: THREE.Vector3, R: number, min: THREE.Vector3, max: THREE.Vector3): number {
+  const closest = new THREE.Vector3(
+    Math.min(Math.max(c.x, min.x), max.x),
+    Math.min(Math.max(c.y, min.y), max.y),
+    Math.min(Math.max(c.z, min.z), max.z),
+  );
+  return closest.distanceTo(c) - R;
+}

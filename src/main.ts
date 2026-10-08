@@ -8,6 +8,8 @@ import { CATALOGUE, DEFAULT_LAYOUT, LAYOUTS } from "./equipment";
 import { PlacedItem, itemBox, zoneBox, applyPlacement, footprint } from "./placement";
 import { linePlaneIntersection, lineSphereHit, lineBoxT } from "./geometry";
 import { roomPlanes, fitInRoom, clearanceColor, boxOverlap, hsvToRgb } from "./checks";
+import { signedPointPlaneDistance, pointSegmentDistance, sphereBoxGap } from "./geometry";
+import { swingSphere, pressSegment, PLATE_RADIUS } from "./reach";
 import { FVMesh, vertexNormalsAverage, vertexNormalsAreaWeighted, normalLines, toBufferGeometry } from "./mesh";
 
 // ---------- Renderer, scene, camera ----------
@@ -48,20 +50,23 @@ function rebuildRoom(): void {
 }
 
 // ---------- Lamp (the point light source) ----------
-// The lamp hangs 10 cm below the ceiling. Its X/Z position is stored as a fraction
+// The lamp hangs LAMP_DROP cm below the ceiling. Its X/Z position is stored as a fraction
 // of the room size (0..1), so it stays inside the room when the room is resized.
 const lamp = { fx: 0.5, fz: 0.5 };
 // A small yellow ball shows where the light is. It is unlit (MeshBasicMaterial) on purpose:
 // it represents the light itself, not a surface that receives light.
+// Part 9: the lamp is also an OBSTACLE — a sphere of radius LAMP_RADIUS hanging under the ceiling.
+const LAMP_RADIUS = 15;  // cm
+const LAMP_DROP = 20;    // cm from the ceiling to the lamp's centre
 const lampMarker = new THREE.Mesh(
-  new THREE.SphereGeometry(6, 16, 12),
+  new THREE.SphereGeometry(LAMP_RADIUS, 24, 16),
   new THREE.MeshBasicMaterial({ color: 0xffe08a })
 );
 scene.add(lampMarker);
 
 /** Puts the light (and its marker) at its place under the ceiling. */
 function updateLamp(): void {
-  const pos = new THREE.Vector3(lamp.fx * room.length, room.height - 10, lamp.fz * room.width);
+  const pos = new THREE.Vector3(lamp.fx * room.length, room.height - LAMP_DROP, lamp.fz * room.width);
   lightUniforms.lightPos.value.copy(pos); // every Phong material sees the new position
   lampMarker.position.copy(pos);
 }
@@ -140,6 +145,7 @@ interface CheckOverlay {
   label: HTMLDivElement;
   zoneFill: THREE.Mesh;          // Part 8: the safety zone on the floor
   zoneOutline: THREE.LineSegments;
+  movement: THREE.Group | null;  // Part 9: swing sphere or press arms + bar
 }
 const overlays = new Map<number, CheckOverlay>();
 const labelLayer = document.getElementById("labels") as HTMLDivElement;
@@ -155,6 +161,35 @@ const methodSelect = document.getElementById("normalMethod") as HTMLSelectElemen
 /** Vertex normals with the method chosen in the panel (Part 4). */
 function computeNormals(m: FVMesh): THREE.Vector3[] {
   return methodSelect.value === "area" ? vertexNormalsAreaWeighted(m) : vertexNormalsAverage(m);
+}
+
+/**
+ * Part 9: the shape of a movement, drawn see-through in the status colour.
+ * Built once at unit size; updateChecks() scales and moves it every frame.
+ *  - swing: a wireframe sphere (radius 1 → scaled to R)
+ *  - press: the arms as a thin vertical rod (height 1 → scaled to the segment length),
+ *           plus the bar with two plates of radius PLATE_RADIUS at the top
+ */
+function buildMovementOverlay(kind: "swing" | "press"): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.35, depthWrite: false });
+  if (kind === "swing") {
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshBasicMaterial({ wireframe: true })));
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), mat));
+  } else {
+    const arms = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 1, 12).translate(0, 0.5, 0), mat);
+    arms.name = "arms";
+    const bar = new THREE.Group();
+    bar.name = "bar";
+    bar.add(new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 130, 8).rotateX(Math.PI / 2), mat));
+    for (const zSide of [-57, 57]) {
+      const plate = new THREE.Mesh(new THREE.CylinderGeometry(PLATE_RADIUS, PLATE_RADIUS, 4, 24).rotateX(Math.PI / 2), mat);
+      plate.position.z = zSide;
+      bar.add(plate);
+    }
+    g.add(arms, bar);
+  }
+  return g;
 }
 
 /** Builds one piece of equipment, adds it to the scene and returns it. */
@@ -190,7 +225,9 @@ function addItem(typeName: string, x: number, z: number, turns = 0): PlacedItem 
     zoneFill: new THREE.Mesh(unitSquare, new THREE.MeshBasicMaterial({
       transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide })),
     zoneOutline: new THREE.LineSegments(new THREE.EdgesGeometry(unitSquare), new THREE.LineBasicMaterial()),
+    movement: type.movement ? buildMovementOverlay(type.movement) : null,
   };
+  if (ov.movement) scene.add(ov.movement);
   ov.label.className = "dist-label";
   labelLayer.appendChild(ov.label);
   scene.add(ov.outline, ov.footprintFill, ov.distLine, ov.zoneFill, ov.zoneOutline);
@@ -208,6 +245,7 @@ function removeItem(item: PlacedItem): void {
   items = items.filter((i) => i !== item);
   const ov = overlays.get(item.id)!;
   scene.remove(ov.outline, ov.footprintFill, ov.distLine, ov.zoneFill, ov.zoneOutline);
+  if (ov.movement) scene.remove(ov.movement);
   ov.zoneOutline.geometry.dispose();
   ov.distLine.geometry.dispose();
   ov.label.remove();
@@ -435,7 +473,17 @@ const showFit = document.getElementById("showFit") as HTMLInputElement;
 const showZones = document.getElementById("showZones") as HTMLInputElement;
 const fitList = document.getElementById("fitList") as HTMLDivElement;
 const conflictList = document.getElementById("conflictList") as HTMLDivElement;
-let lastFitHtml = "", lastConflictHtml = "";
+const moveList = document.getElementById("moveList") as HTMLDivElement;
+const verdict = document.getElementById("verdict") as HTMLDivElement;
+let lastFitHtml = "", lastConflictHtml = "", lastMoveHtml = "", lastVerdictHtml = "";
+
+// Part 9: the user's height (cm) — the movement shapes are built from it (reach.ts).
+let personHeight = 175;
+const heightInput = document.getElementById("personHeight") as HTMLInputElement;
+const heightLabel = document.getElementById("personHeightVal") as HTMLSpanElement;
+const updateHeight = () => { personHeight = Number(heightInput.value); heightLabel.textContent = `${personHeight} cm`; };
+heightInput.addEventListener("input", updateHeight);
+updateHeight();
 
 // Status colours, all from the HSV model (Color slide 38) with the same S and V:
 const COLOR_COLLISION = hsvToRgb(0, 0.85, 0.95);     // red    — pieces overlap / outside the room
@@ -496,13 +544,76 @@ function updateChecks(): void {
     }
   }
 
+  // Part 9 — movements: the swing SPHERE and the press SEGMENT against the room, the lamp
+  // and the other pieces. For each one we keep the smallest gap (negative = they hit).
+  const H = personHeight;
+  const lampPos = lightUniforms.lightPos.value;
+  const moveRows: string[] = [];
+  const moveGap = new Map<number, number>();
+  for (const it of items) {
+    if (!it.type.movement) continue;
+    const gaps: { what: string; gap: number }[] = [];
+    if (it.type.movement === "swing") {
+      const { centre, R } = swingSphere(it.x, it.z, H);
+      // walls and ceiling: signed point–plane distance of the centre, minus the radius (slide 20)
+      for (const w of walls) gaps.push({ what: w.name, gap: signedPointPlaneDistance(centre, w.n, w.D) - R });
+      // the lamp: two spheres touch when the distance between centres < R1 + R2
+      gaps.push({ what: "lamp", gap: centre.distanceTo(lampPos) - R - LAMP_RADIUS });
+      // the other pieces: sphere against box
+      for (const other of items) {
+        if (other === it) continue;
+        const b = itemBox(other);
+        gaps.push({ what: other.type.name, gap: sphereBoxGap(centre, R, b.min, b.max) });
+      }
+    } else {
+      const { P1, P2 } = pressSegment(it.x, it.z, H);
+      // ceiling: the hands' distance to the ceiling plane, minus the plates' radius
+      const ceiling = walls.find((w) => w.name === "ceiling")!;
+      gaps.push({ what: "ceiling", gap: signedPointPlaneDistance(P2, ceiling.n, ceiling.D) - PLATE_RADIUS });
+      // the lamp: distance from the lamp's centre to the arm SEGMENT (slide 19: check the end points)
+      gaps.push({ what: "lamp", gap: pointSegmentDistance(lampPos, P1, P2) - PLATE_RADIUS - LAMP_RADIUS });
+    }
+    const worst = gaps.reduce((a, b) => (b.gap < a.gap ? b : a));
+    moveGap.set(it.id, worst.gap);
+    // Decide on the exact value, round only for display (a 0.3 cm overlap is still a hit → "1 cm").
+    const hit = worst.gap < 0;
+    const cmText = hit ? Math.max(1, Math.round(-worst.gap)) : Math.round(worst.gap);
+    const verb = it.type.movement === "swing" ? "swing" : "press";
+    if (hit) {
+      const hits = gaps.filter((x) => x.gap < 0).map((x) => x.what);
+      conflicts.push(`<b style="color:${hex(COLOR_COLLISION)}">✕</b> ${it.type.name}: the ${verb} hits the ${hits.join(", ")} ` +
+        `(${cmText} cm too close)`);
+    }
+    moveRows.push(`<b style="color:${hex(clearanceColor(worst.gap))}">■</b> ${it.type.name}: ` +
+      (hit ? `❌ hits the ${worst.what} by ${cmText} cm` : `✔ ${cmText} cm to the ${worst.what}`));
+
+    // draw the movement shape
+    const ov = overlays.get(it.id)!;
+    const mc = clearanceColor(worst.gap);
+    ov.movement!.traverse((o) => { if (o instanceof THREE.Mesh) (o.material as THREE.MeshBasicMaterial).color.copy(mc); });
+    if (it.type.movement === "swing") {
+      const { centre, R } = swingSphere(it.x, it.z, H);
+      ov.movement!.position.copy(centre);
+      ov.movement!.scale.setScalar(R);
+    } else {
+      const { P1, P2 } = pressSegment(it.x, it.z, H);
+      ov.movement!.position.copy(P1);
+      ov.movement!.getObjectByName("arms")!.scale.set(1, P2.y - P1.y, 1);
+      ov.movement!.getObjectByName("bar")!.position.set(0, P2.y - P1.y, 0);
+      ov.movement!.rotation.y = (it.turns * Math.PI) / 2; // the bar turns with the spot
+    }
+    ov.movement!.visible = showFit.checked;
+  }
+  const moveHtml = moveRows.length ? moveRows.join("<br>") : "Add a kettlebell or press spot to check a movement.";
+  if (moveHtml !== lastMoveHtml) { moveList.innerHTML = moveHtml; lastMoveHtml = moveHtml; }
+
   for (const it of items) {
     const ov = overlays.get(it.id)!;
     const { min, max } = itemBox(it);
     const fit = fitInRoom(min, max, walls);
     const cm = Math.round(fit.clearance);
     // Status colour, most serious problem first.
-    const color = collided.has(it.id) || fit.clearance < 0 ? COLOR_COLLISION
+    const color = collided.has(it.id) || fit.clearance < 0 || (moveGap.get(it.id) ?? 0) < 0 ? COLOR_COLLISION
                 : zoneBlocked.has(it.id) ? COLOR_ZONE_BLOCKED
                 : clearanceColor(fit.clearance);
 
@@ -547,6 +658,13 @@ function updateChecks(): void {
   if (fitHtml !== lastFitHtml) { fitList.innerHTML = fitHtml; lastFitHtml = fitHtml; } // touch the DOM only on change
   const conflictHtml = conflicts.length ? conflicts.join("<br>") : "✔ No overlaps, every safety zone is free.";
   if (conflictHtml !== lastConflictHtml) { conflictList.innerHTML = conflictHtml; lastConflictHtml = conflictHtml; }
+
+  // Final verdict (Part 9): one line that answers the project's question.
+  const problems = conflicts.length + items.filter((it) => fitInRoom(itemBox(it).min, itemBox(it).max, walls).clearance < 0).length;
+  const verdictHtml = problems === 0
+    ? `<b style="color:${hex(clearanceColor(100))}">✔ This home gym works: everything fits, with room to train.</b>`
+    : `<b style="color:${hex(COLOR_COLLISION)}">⚠ ${problems} problem${problems > 1 ? "s" : ""} — see the lists below.</b>`;
+  if (verdictHtml !== lastVerdictHtml) { verdict.innerHTML = verdictHtml; lastVerdictHtml = verdictHtml; }
 }
 
 // ---------- Start ----------

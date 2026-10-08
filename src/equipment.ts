@@ -21,6 +21,8 @@ export interface EquipmentType {
    * frame: front = +X, back = −X, side = each of ±Z. See SAFETY_ZONE_SOURCES below.
    */
   zone: { front: number; back: number; side: number };
+  /** Part 9: a training spot (not a machine) whose movement is checked in 3D — see reach.ts. */
+  movement?: "swing" | "press";
   build: () => Part[];
 }
 
@@ -135,6 +137,29 @@ export const CATALOGUE: EquipmentType[] = [
     zone: { front: 30, back: 30, side: 30 },      // arms and legs reach past the mat
     build: () => [part(materials.rubber, (m) => addBox(m, 0, 0.5, 0, 180, 1, 60))],
   },
+  // ---- Part 9: training spots. The box is just where you stand (60 × 60 cm); the space the
+  //      MOVEMENT needs is a sphere (swing) or a segment (press), built in reach.ts.
+  {
+    name: "Kettlebell swing spot",
+    size: { length: 60, width: 60, height: 1 },
+    zone: { front: 0, back: 0, side: 0 },
+    movement: "swing",
+    build: () => [
+      part(materials.rubber, (m) => addBox(m, 0, 0.5, 0, 60, 1, 60)),        // where you stand
+      part(materials.black, (m) => {
+        addCylinder(m, V(15, 10, 0), "y", 11, 18, 24);                       // kettlebell body
+        addBox(m, 15, 23, -7, 3, 8, 3); addBox(m, 15, 23, 7, 3, 8, 3);       // handle posts
+        addBox(m, 15, 28, 0, 3, 3, 17);                                       // handle
+      }),
+    ],
+  },
+  {
+    name: "Overhead press spot",
+    size: { length: 60, width: 60, height: 1 },
+    zone: { front: 0, back: 0, side: 0 },
+    movement: "press",
+    build: () => [part(materials.rubber, (m) => addBox(m, 0, 0.5, 0, 60, 1, 60))], // where you stand
+  },
 ];
 
 /** A ready-made arrangement: footprint centre (x, z) in cm and quarter turns of each piece. */
@@ -159,6 +184,11 @@ export const LAYOUTS: Record<string, LayoutEntry[]> = {
     { type: "Treadmill", x: 290, z: 90 },   // runs toward the right wall, 2 m free behind it
     { type: "Squat rack", x: 80, z: 255 },  // steps out toward the room centre
     { type: "Bench", x: 300, z: 265 },
+  ],
+  // Only the two training spots, so the movement checks can be seen on their own.
+  "Movement demo (Part 9)": [
+    { type: "Overhead press spot", x: 200, z: 175 },   // right under the lamp
+    { type: "Kettlebell swing spot", x: 330, z: 100 }, // close to the right wall
   ],
 };
 export const DEFAULT_LAYOUT = LAYOUTS["Starter (placed by eye)"];

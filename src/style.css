@@ -24,3 +24,4 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d25; fon
   background: rgba(20, 22, 30, 0.85); color: #fff; font-size: 11px; white-space: nowrap;
   padding: 1px 5px; border: 2px solid #fff; border-radius: 4px;
 }
+#panel .verdict { font-size: 12px; margin: 0 0 6px; line-height: 1.4; }

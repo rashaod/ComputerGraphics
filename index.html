@@ -15,6 +15,7 @@
     <!-- Control panel (plain HTML, no UI library). -->
     <div id="panel">
       <h1>Home-Gym Planner</h1>
+      <div id="verdict" class="verdict"></div>
 
       <h2>Room (cm)</h2>
       <label>Length (X) <span id="lengthVal"></span>
@@ -63,6 +64,11 @@
       <h2>Fits in the room? (Part 7)</h2>
       <label><input id="showFit" type="checkbox" checked /> Show clearance colours &amp; distances</label>
       <div id="fitList" class="stats"></div>
+
+      <h2>Movements (Part 9)</h2>
+      <label>Your height <span id="personHeightVal"></span>
+        <input id="personHeight" type="range" min="150" max="200" step="1" value="175" /></label>
+      <div id="moveList" class="stats"></div>
 
       <h2>Overlaps &amp; safety zones (Part 8)</h2>
       <label><input id="showZones" type="checkbox" checked /> Show safety zones</label>

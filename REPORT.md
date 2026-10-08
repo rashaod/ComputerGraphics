@@ -329,3 +329,79 @@ A zone is **blocked** if another piece's box is inside it (the same box-overlap 
 - Zones are rectangles. Real free space is often rounder (for example, the arc of a kettlebell swing — Part 9 uses a sphere for that).
 - Except for the treadmill, the zone sizes are assumptions, not standards.
 - The overlap test is for boxes aligned with the room, which is why rotation is limited to quarter turns.
+
+---
+
+## Part 9 — Movements: the kettlebell swing and the overhead press
+
+### Approach
+A room can fit every machine and still be unsafe to train in: what matters for some exercises is not the equipment but **the space the body and the weight move through**. Two common home exercises are modelled as simple 3D shapes (`src/reach.ts`), placed with two new "training spots" in the catalogue:
+
+| Movement | Shape | Built from |
+|---|---|---|
+| Kettlebell swing | **sphere** around the shoulders | centre at shoulder height, radius = arm length + the bell (15 cm) |
+| Overhead press | vertical **segment** from the shoulders to the hands at lockout | the bar's plates (radius 22 cm, as on our barbell) must clear everything |
+
+Body sizes come from the user's height `H` (a new slider), using classic anthropometric segment proportions (Drillis & Contini): shoulder height ≈ 0.818·H and shoulder-to-grip ≈ 0.386·H. These are averages, not measurements of the user.
+
+The ceiling lamp from Part 2 is now also an **obstacle**: a sphere of radius 15 cm hanging 20 cm below the ceiling.
+
+The tests, all from the *Basic Geometry* lecture (`src/geometry.ts`, `updateChecks` in `src/main.ts`):
+
+- **Swing sphere vs walls and ceiling** — the signed point–plane distance of the sphere's centre (slide 20) minus the radius: if the centre is closer to a plane than `R`, the bell can hit it.
+- **Swing sphere vs lamp** — two spheres touch when the distance between their centres is less than `R₁ + R₂` (the "distance to the centre compared with R" idea of slide 24).
+- **Swing sphere vs other pieces** — sphere against box: the box point closest to the centre is found by *clamping* the centre into the box's range, then compared with `R`.
+- **Press segment vs ceiling** — the hands' point–plane distance to the ceiling, minus the plate radius.
+- **Press segment vs lamp** — the distance from the lamp's centre to the arm **segment**. Slide 16 gives the distance to an infinite *line*; slide 19 warns that for a segment you "need to check end points separately". `pointSegmentDistance` projects the point onto the line (parameter `t`), uses slide 16 when `0 ≤ t ≤ 1`, and the nearest end point otherwise. Here this matters: the lamp is *above* the hands, beyond the end of the segment, so the infinite-line distance would be wrong (it would be the horizontal distance only).
+
+For each movement the smallest gap is shown in the panel (*"✔ 17 cm to the ceiling"* / *"❌ hits the lamp by 18 cm"*), the shape is drawn see-through in the HSV status colour, and every hit is added to the problem list.
+
+**A final verdict** at the top of the panel sums up all checks of Parts 7–9 in one line — either *"✔ This home gym works: everything fits, with room to train"* or *"⚠ N problems — see the lists below"*. This is the one-line answer to the project's question.
+
+**Relation to the homework:** nanorender only drew surfaces. Here the "objects" being checked are not drawn meshes at all but invisible volumes of movement, and the geometry is used to reason about them.
+
+### Result
+![Movement checks: before and after, and a taller person](./assets/part9_movements.jpg)
+
+*Layout "Movement demo (Part 9)" in the default 400 × 350 × 250 cm room, person height 175 cm:*
+
+| Step | Overhead press | Kettlebell swing | Verdict |
+|---|---|---|---|
+| 1. Press right under the lamp, swing 70 cm from the right wall | ❌ hits the lamp by 18 cm | ❌ hits the right wall by 13 cm | ⚠ 2 problems |
+| 2. Lamp moved to 70 %, swing spot moved 30 cm left | ✔ 17 cm to the ceiling | ✔ 17 cm to the right wall | ✔ works |
+| 3. Same layout, person height 195 cm | ❌ hits the ceiling by 7 cm | ❌ hits the lamp by 1 cm | ⚠ 2 problems |
+
+*Hand check, step 1 (H = 175): shoulders at 0.818 × 175 = 143.2 cm, hands at 143.2 + 0.386 × 175 = 210.7 cm. The lamp's centre is at 250 − 20 = 230 cm, straight above the hands, so the distance to the segment is 230 − 210.7 = 19.3 cm (the end point P2 — slide 19's case). Minus the plate radius 22 and lamp radius 15 gives −17.7 → "hits the lamp by 18 cm". Ceiling: 250 − 210.7 − 22 = 17.3 → "17 cm". Swing: R = 0.386 × 175 + 15 = 82.6 cm, and the centre is 400 − 330 = 70 cm from the right wall → 70 − 82.6 = −12.6 → "13 cm".*
+
+*Step 3 shows why the height slider matters: the same room that works for a 175 cm person does not work for a 195 cm person (hands at 234.8 cm, plates 7 cm into the ceiling).*
+
+### Limitations
+- The swing sphere is cautious: a real swing moves mostly in front of the body, not in every direction.
+- Body proportions are population averages; a person with long arms needs more space than shown.
+- The press only checks the ceiling and the lamp, not other equipment above the head (for example, pressing inside the squat rack under its top bars), and the bar's sideways length is not checked against walls.
+
+---
+
+## Summary
+
+**Question:** *Will my gym equipment fit in my room — with enough safe space around each piece to train?*
+
+**Answer the planner gives:** for the default 4 × 3.5 × 2.5 m room, a treadmill, a squat rack and a bench fit with all their safety space; the bike and the mat did not fit as well in our attempts; and whether an overhead press is safe depends on the lamp's position and on the person's height.
+
+### How the lectures were used
+
+| Lecture | Where | What |
+|---|---|---|
+| **Illumination Models & Shading** | Parts 2, 5 | Own Phong reflection model (ambient, diffuse, specular, slides 12–22) with on/off toggles; Gouraud vs Phong shading (slides 25–29), answering slide 28's question with a measurement |
+| **Mesh Modeling** | Parts 3, 4 | Face-vertex meshes built in code (slide 8); per-vertex-per-face normals for sharp boxes; plain vs area-weighted vertex normals (slide 11) |
+| **Basic Geometry** | Parts 6–9 | Parametric line (15), line–plane intersection and point–plane distance (20), point–line distance (16), segment end points (19), line–sphere (24), static collision of boxes (21), cross product for face orientation (8) |
+| **Color** | Parts 7–9 | HSV model (slide 38) for status colours that differ only in hue |
+
+### What I would add with more time
+- Free rotation of equipment (would need an oriented-box overlap test).
+- Doors, windows and radiators as fixed obstacles.
+- A search that tries arrangements automatically and suggests one that passes.
+- Saving and loading a room to a file.
+
+### Use of AI
+*(Draft — reword and adjust to what you actually did.)* The course encourages AI-assisted development. I used Claude as a coding partner: it proposed the project idea from my lecture slides, and wrote code part by part, which I ran, tested and committed one part at a time. I asked for every formula to use the slide's names and a comment quoting the slide, so that I could check each one against the lecture. For every part I verified the numbers by hand (see the "hand check" notes) and reviewed the screenshots before committing.
