@@ -69,7 +69,12 @@ To keep the repository clean and the reports professional, follow these standard
 ## Table of Contents
 | Assignment | Link |
 | :--- | :--- |
-| **Project 1: My First Project** | [View Folder](./MyFirstProject/) |
+| **HW1: Basic Graphics and Immediate Mode GUI** | [Report](./assignments/hw1.md) |
+| **HW2: Wireframe Viewer and Geometric Transformations** | [Report](./assignments/hw2.md) |
+| **HW3: Virtual Cameras and Projections** | [Report](./assignments/hw3.md) |
+| **HW4: Triangle Rasterization and Depth Buffering** | [Report](./assignments/hw4.md) |
+| **HW5: Lighting, Materials, and Shading** | [Report](./assignments/hw5.md) |
+| **Project 1: Home-Gym Planner** | [View Folder](./homeGym/) · [Report](./homeGym/REPORT.md) |
 
 ---
 *Note: Please ensure all internal links remain functional as you add new folders.*
