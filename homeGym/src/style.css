@@ -1,0 +1,27 @@
+html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d25; font-family: system-ui, sans-serif; }
+#view { display: block; width: 100%; height: 100%; }
+#panel {
+  position: absolute; top: 12px; right: 12px; width: 240px;
+  background: rgba(40, 44, 58, 0.92); color: #e6e6ee;
+  padding: 12px 14px; border-radius: 8px; font-size: 13px;
+}
+#panel h1 { font-size: 16px; margin: 0 0 8px; }
+#panel h2 { font-size: 13px; margin: 12px 0 4px; color: #9fb4ff; }
+#panel label { display: block; margin: 6px 0; }
+#panel input[type=checkbox] { vertical-align: middle; margin: 0 6px 0 0; }
+#panel input[type=range] { width: 100%; }
+#panel span { float: right; color: #ffd479; }
+#panel .stats { font-size: 11px; color: #b8bccb; line-height: 1.5; }
+#panel select { width: 100%; margin-top: 3px; background: #1f222c; color: #e6e6ee; border: 1px solid #4a4f63; border-radius: 4px; padding: 2px; }
+#panel .row { display: flex; gap: 6px; margin: 6px 0; }
+#panel .row select { flex: 1; margin: 0; }
+#panel button { background: #3b4a7a; color: #fff; border: 0; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
+#panel button:hover { background: #4d5f99; }
+#panel { max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.dist-label {
+  position: absolute; transform: translate(-50%, -50%);
+  background: rgba(20, 22, 30, 0.85); color: #fff; font-size: 11px; white-space: nowrap;
+  padding: 1px 5px; border: 2px solid #fff; border-radius: 4px;
+}
+#panel .verdict { font-size: 12px; margin: 0 0 6px; line-height: 1.4; }
