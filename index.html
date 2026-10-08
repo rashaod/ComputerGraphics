@@ -46,12 +46,16 @@
 
       <h2>Equipment (Part 6)</h2>
       <div class="row">
+        <select id="layoutSelect"></select>
+        <button id="layoutBtn">Load</button>
+      </div>
+      <div class="row">
         <select id="addType"></select>
         <button id="addBtn">Add</button>
       </div>
       <div id="selInfo" class="stats"></div>
       <div class="row">
-        <button id="turnBtn">Turn 90° (R)</button>
+        <button id="turnBtn">Rotate 90° (R)</button>
         <button id="deleteBtn">Delete (Del)</button>
       </div>
       <div class="stats">Drag a piece to move it · arrows = 5 cm steps</div>
@@ -59,6 +63,10 @@
       <h2>Fits in the room? (Part 7)</h2>
       <label><input id="showFit" type="checkbox" checked /> Show clearance colours &amp; distances</label>
       <div id="fitList" class="stats"></div>
+
+      <h2>Overlaps &amp; safety zones (Part 8)</h2>
+      <label><input id="showZones" type="checkbox" checked /> Show safety zones</label>
+      <div id="conflictList" class="stats"></div>
 
       <h2>Equipment meshes</h2>
       <label><input id="showWire" type="checkbox" /> Show triangles (wireframe)</label>

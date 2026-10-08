@@ -16,8 +16,22 @@ export interface Part { mesh: FVMesh; material: THREE.ShaderMaterial; }
 export interface EquipmentType {
   name: string;
   size: { length: number; width: number; height: number };
+  /**
+   * Part 8 — free space needed around the box while training, in cm, in the item's own
+   * frame: front = +X, back = −X, side = each of ±Z. See SAFETY_ZONE_SOURCES below.
+   */
+  zone: { front: number; back: number; side: number };
   build: () => Part[];
 }
+
+/**
+ * Where the safety-zone numbers come from:
+ *  - Treadmill: ASTM F2115 (treadmill safety standard) — 0.5 m on each side and
+ *    2 m behind the running surface. The user runs facing +X (the console end).
+ *  - Everything else: the planner's own ASSUMPTIONS for a home gym (space to step in and
+ *    out, load plates, get on and off), not a standard. They are easy to change here.
+ */
+export const SAFETY_ZONE_SOURCES = "Treadmill: ASTM F2115. Others: planner assumptions.";
 
 // ---------- Materials (slide 13: k = material color) ----------
 const C = (r: number, g: number, b: number) => new THREE.Color(r, g, b);
@@ -46,6 +60,7 @@ export const CATALOGUE: EquipmentType[] = [
   {
     name: "Treadmill",
     size: { length: 180, width: 80, height: 140 },
+    zone: { front: 0, back: 200, side: 50 },      // ASTM F2115
     build: () => [
       part(materials.frame, (m) => {
         addBox(m, 0, 12, -35, 170, 16, 10);  // left side frame of the deck
@@ -66,6 +81,7 @@ export const CATALOGUE: EquipmentType[] = [
   {
     name: "Squat rack",
     size: { length: 120, width: 130, height: 215 },
+    zone: { front: 60, back: 0, side: 30 },       // step out with the bar (front = bar side); load plates
     build: () => [
       part(materials.frame, (m) => {
         for (const x of [-50, 50]) for (const z of [-50, 50]) addBox(m, x, 107.5, z, 7, 215, 7); // 4 posts
@@ -83,6 +99,7 @@ export const CATALOGUE: EquipmentType[] = [
   {
     name: "Bench",
     size: { length: 120, width: 50, height: 45 },
+    zone: { front: 30, back: 30, side: 60 },      // sit down / lie down from the side, dumbbells
     build: () => [
       part(materials.pad, (m) => addBox(m, 0, 40, 0, 120, 10, 30)), // pad
       part(materials.frame, (m) => {
@@ -97,6 +114,7 @@ export const CATALOGUE: EquipmentType[] = [
   {
     name: "Exercise bike",
     size: { length: 100, width: 55, height: 120 },
+    zone: { front: 30, back: 30, side: 50 },      // get on and off from the side
     build: () => [
       part(materials.frame, (m) => {
         for (const x of [-40, 40]) addBox(m, x, 4, 0, 8, 8, 55); // floor stabilisers
@@ -114,15 +132,33 @@ export const CATALOGUE: EquipmentType[] = [
   {
     name: "Yoga mat",
     size: { length: 180, width: 60, height: 1 },
+    zone: { front: 30, back: 30, side: 30 },      // arms and legs reach past the mat
     build: () => [part(materials.rubber, (m) => addBox(m, 0, 0.5, 0, 180, 1, 60))],
   },
 ];
 
-/** Default layout for a 400 × 350 cm room (x, z of each footprint centre). Part 6 makes it movable. */
-export const DEFAULT_LAYOUT: { type: string; x: number; z: number }[] = [
-  { type: "Treadmill", x: 110, z: 60 },
-  { type: "Squat rack", x: 320, z: 90 },
-  { type: "Yoga mat", x: 170, z: 180 },
-  { type: "Bench", x: 300, z: 265 },
-  { type: "Exercise bike", x: 80, z: 265 },
-];
+/** A ready-made arrangement: footprint centre (x, z) in cm and quarter turns of each piece. */
+export interface LayoutEntry { type: string; x: number; z: number; turns?: number; }
+
+/**
+ * Example layouts for the default 400 × 350 cm room, selectable in the panel.
+ *  - "Starter": everything placed by eye. It fits in the room (Part 7) but ignores the
+ *    safety zones, so Part 8 finds several problems.
+ *  - "Safe": rearranged until every check passes. Only the treadmill, rack and bench fit
+ *    with their safety space — the treadmill and its zone alone cover about half of the floor.
+ */
+export const LAYOUTS: Record<string, LayoutEntry[]> = {
+  "Starter (placed by eye)": [
+    { type: "Treadmill", x: 110, z: 60 },
+    { type: "Squat rack", x: 320, z: 90 },
+    { type: "Yoga mat", x: 170, z: 180 },
+    { type: "Bench", x: 300, z: 265 },
+    { type: "Exercise bike", x: 80, z: 265 },
+  ],
+  "Safe (all checks pass)": [
+    { type: "Treadmill", x: 290, z: 90 },   // runs toward the right wall, 2 m free behind it
+    { type: "Squat rack", x: 80, z: 255 },  // steps out toward the room centre
+    { type: "Bench", x: 300, z: 265 },
+  ],
+};
+export const DEFAULT_LAYOUT = LAYOUTS["Starter (placed by eye)"];

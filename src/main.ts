@@ -4,10 +4,10 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildRoom, Room } from "./room";
 import { lightUniforms } from "./phong";
-import { CATALOGUE, DEFAULT_LAYOUT } from "./equipment";
-import { PlacedItem, itemBox, applyPlacement, footprint } from "./placement";
+import { CATALOGUE, DEFAULT_LAYOUT, LAYOUTS } from "./equipment";
+import { PlacedItem, itemBox, zoneBox, applyPlacement, footprint } from "./placement";
 import { linePlaneIntersection, lineSphereHit, lineBoxT } from "./geometry";
-import { roomPlanes, fitInRoom, clearanceColor } from "./checks";
+import { roomPlanes, fitInRoom, clearanceColor, boxOverlap, hsvToRgb } from "./checks";
 import { FVMesh, vertexNormalsAverage, vertexNormalsAreaWeighted, normalLines, toBufferGeometry } from "./mesh";
 
 // ---------- Renderer, scene, camera ----------
@@ -138,6 +138,8 @@ interface CheckOverlay {
   footprintFill: THREE.Mesh;
   distLine: THREE.Line;
   label: HTMLDivElement;
+  zoneFill: THREE.Mesh;          // Part 8: the safety zone on the floor
+  zoneOutline: THREE.LineSegments;
 }
 const overlays = new Map<number, CheckOverlay>();
 const labelLayer = document.getElementById("labels") as HTMLDivElement;
@@ -156,9 +158,9 @@ function computeNormals(m: FVMesh): THREE.Vector3[] {
 }
 
 /** Builds one piece of equipment, adds it to the scene and returns it. */
-function addItem(typeName: string, x: number, z: number, turned = false): PlacedItem {
+function addItem(typeName: string, x: number, z: number, turns = 0): PlacedItem {
   const type = CATALOGUE.find((t) => t.name === typeName)!;
-  const item: PlacedItem = { id: nextId++, type, group: new THREE.Group(), x, z, turned };
+  const item: PlacedItem = { id: nextId++, type, group: new THREE.Group(), x, z, turns };
   for (const p of type.build()) {
     const normals = computeNormals(p.mesh);
     const geometry = toBufferGeometry(p.mesh, normals);
@@ -185,10 +187,13 @@ function addItem(typeName: string, x: number, z: number, turned = false): Placed
     distLine: new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
       new THREE.LineBasicMaterial({ color: 0xffffff })),
     label: document.createElement("div"),
+    zoneFill: new THREE.Mesh(unitSquare, new THREE.MeshBasicMaterial({
+      transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide })),
+    zoneOutline: new THREE.LineSegments(new THREE.EdgesGeometry(unitSquare), new THREE.LineBasicMaterial()),
   };
   ov.label.className = "dist-label";
   labelLayer.appendChild(ov.label);
-  scene.add(ov.outline, ov.footprintFill, ov.distLine);
+  scene.add(ov.outline, ov.footprintFill, ov.distLine, ov.zoneFill, ov.zoneOutline);
   overlays.set(item.id, ov);
   return item;
 }
@@ -202,13 +207,14 @@ function removeItem(item: PlacedItem): void {
   sceneParts = sceneParts.filter((p) => p.itemId !== item.id);
   items = items.filter((i) => i !== item);
   const ov = overlays.get(item.id)!;
-  scene.remove(ov.outline, ov.footprintFill, ov.distLine);
+  scene.remove(ov.outline, ov.footprintFill, ov.distLine, ov.zoneFill, ov.zoneOutline);
+  ov.zoneOutline.geometry.dispose();
   ov.distLine.geometry.dispose();
   ov.label.remove();
   overlays.delete(item.id);
 }
 
-for (const placed of DEFAULT_LAYOUT) addItem(placed.type, placed.x, placed.z);
+for (const placed of DEFAULT_LAYOUT) addItem(placed.type, placed.x, placed.z, placed.turns ?? 0);
 
 /** The vertex/triangle counts in the panel (Part 3). */
 function updateStats(): void {
@@ -267,7 +273,7 @@ function updateSelectionView(): void {
   selectionOutline.position.copy(min.clone().add(max).multiplyScalar(0.5)); // → box centre
   const f = footprint(selected);
   info.innerHTML = `<b>${selected.type.name}</b><br>centre x = ${selected.x} cm, z = ${selected.z} cm<br>` +
-    `box ${f.sizeX} × ${f.sizeZ} × ${f.height} cm${selected.turned ? " (turned 90°)" : ""}`;
+    `box ${f.sizeX} × ${f.sizeZ} × ${f.height} cm, rotated ${selected.turns * 90}°`;
 }
 function select(item: PlacedItem | null): void {
   selected = item;
@@ -349,10 +355,10 @@ const endDrag = () => { dragOffset = null; controls.enabled = true; };
 canvas.addEventListener("pointerup", endDrag);
 canvas.addEventListener("pointercancel", endDrag);
 
-/** Turns the selected piece by 90° around its own centre. */
+/** Turns the selected piece by 90° around its own centre (0° → 90° → 180° → 270° → 0°). */
 function turnSelected(): void {
   if (!selected) return;
-  selected.turned = !selected.turned;
+  selected.turns = (selected.turns + 1) % 4;
   applyPlacement(selected);
   updateSelectionView();
 }
@@ -362,6 +368,17 @@ function deleteSelected(): void {
   select(null);
   updateStats();
 }
+
+// Panel: load one of the example layouts (replaces everything in the room).
+const layoutSelect = document.getElementById("layoutSelect") as HTMLSelectElement;
+for (const name of Object.keys(LAYOUTS)) layoutSelect.add(new Option(name, name));
+document.getElementById("layoutBtn")!.addEventListener("click", () => {
+  for (const it of [...items]) removeItem(it);
+  for (const e of LAYOUTS[layoutSelect.value]) addItem(e.type, e.x, e.z, e.turns ?? 0);
+  select(null);
+  updateStats();
+  refreshLookAt();
+});
 
 // Panel: add a new piece in the middle of the room, turn, delete.
 const addSelect = document.getElementById("addType") as HTMLSelectElement;
@@ -413,35 +430,97 @@ lookSelect.addEventListener("change", () => {
   controls.update();
 });
 
-// ---------- Part 7: does every piece fit in the room? ----------
+// ---------- Parts 7–8: does every piece fit, and does it have its safety space? ----------
 const showFit = document.getElementById("showFit") as HTMLInputElement;
+const showZones = document.getElementById("showZones") as HTMLInputElement;
 const fitList = document.getElementById("fitList") as HTMLDivElement;
-let lastFitHtml = "";
+const conflictList = document.getElementById("conflictList") as HTMLDivElement;
+let lastFitHtml = "", lastConflictHtml = "";
+
+// Status colours, all from the HSV model (Color slide 38) with the same S and V:
+const COLOR_COLLISION = hsvToRgb(0, 0.85, 0.95);     // red    — pieces overlap / outside the room
+const COLOR_ZONE_BLOCKED = hsvToRgb(30, 0.85, 0.95); // orange — its safety space is blocked
+const COLOR_ZONE_OK = hsvToRgb(200, 0.5, 0.95);      // light blue — a free safety zone
+const hex = (c: THREE.Color) => "#" + c.getHexString(THREE.SRGBColorSpace);
+
+/** Places a flat unit-square overlay (fill + outline) over a rectangle of the floor. */
+function placeOnFloor(obj: THREE.Object3D, min: THREE.Vector3, max: THREE.Vector3, y: number): void {
+  obj.position.set((min.x + max.x) / 2, y, (min.z + max.z) / 2);
+  obj.scale.set(max.x - min.x, 1, max.z - min.z);
+}
 
 /**
- * Runs the fit check for every piece (checks.ts) and updates the overlays.
- * Called every frame: it is cheap (a few pieces × 8 corners × 5 planes), and it means the
- * colours follow the piece while it is being dragged or while the room sliders move.
+ * Runs all checks for every piece and updates the overlays. Called every frame: it is cheap
+ * (a few pieces), and the colours follow a piece while it is dragged or the room changes.
+ *   Part 7: fit in the room   — signed point–plane distance of the 8 box corners
+ *   Part 8: overlaps          — box vs box (static collision, slide 21)
+ *           safety zones      — zone box vs the other boxes, and vs the walls
  */
 function updateChecks(): void {
-  const planes = roomPlanes(room);
-  const rows: string[] = [];
+  const walls = roomPlanes(room);
+  const wallsOnly = walls.filter((w) => w.name !== "ceiling"); // a zone is floor space only
   const r = canvas.getBoundingClientRect();
+  const fitRows: string[] = [];
+  const conflicts: string[] = [];
+  const collided = new Set<number>();
+  const zoneBlocked = new Set<number>();
+
+  // Part 8a — every PAIR of pieces: do their boxes overlap?
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      const o = boxOverlap(itemBox(items[i]), itemBox(items[j]));
+      if (o.intersects) {
+        collided.add(items[i].id); collided.add(items[j].id);
+        conflicts.push(`<b style="color:${hex(COLOR_COLLISION)}">✕</b> ${items[i].type.name} and ` +
+          `${items[j].type.name} overlap by ${Math.round(o.depth)} cm`);
+      }
+    }
+  }
+  // Part 8b — every piece's SAFETY ZONE: is another piece, or a wall, inside it?
+  for (const it of items) {
+    const zone = zoneBox(it);
+    const blockers: string[] = [];
+    for (const other of items) {
+      if (other === it) continue;
+      if (boxOverlap(zone, itemBox(other)).intersects) blockers.push(other.type.name);
+    }
+    const zfit = fitInRoom(zone.min, zone.max, wallsOnly);
+    if (zfit.clearance < 0) {
+      blockers.push(`${zfit.wall} (${Math.round(-zfit.clearance)} cm short)`);
+      for (const w of zfit.outside) if (w !== zfit.wall) blockers.push(w); // other walls it also crosses
+    }
+    if (blockers.length) {
+      zoneBlocked.add(it.id);
+      conflicts.push(`<b style="color:${hex(COLOR_ZONE_BLOCKED)}">!</b> ${it.type.name} needs free space; ` +
+        `blocked by ${blockers.join(", ")}`);
+    }
+  }
+
   for (const it of items) {
     const ov = overlays.get(it.id)!;
     const { min, max } = itemBox(it);
-    const fit = fitInRoom(min, max, planes);
-    const color = clearanceColor(fit.clearance);
+    const fit = fitInRoom(min, max, walls);
     const cm = Math.round(fit.clearance);
+    // Status colour, most serious problem first.
+    const color = collided.has(it.id) || fit.clearance < 0 ? COLOR_COLLISION
+                : zoneBlocked.has(it.id) ? COLOR_ZONE_BLOCKED
+                : clearanceColor(fit.clearance);
 
     // box outline + footprint on the floor, in the status colour
     const size = max.clone().sub(min);
     ov.outline.position.copy(min.clone().add(max).multiplyScalar(0.5));
     ov.outline.scale.copy(size);
     (ov.outline.material as THREE.LineBasicMaterial).color.copy(color);
-    ov.footprintFill.position.set((min.x + max.x) / 2, 0.3, (min.z + max.z) / 2);
-    ov.footprintFill.scale.set(size.x, 1, size.z);
+    placeOnFloor(ov.footprintFill, min, max, 0.3);
     (ov.footprintFill.material as THREE.MeshBasicMaterial).color.copy(color);
+
+    // safety zone on the floor (just below the footprint)
+    const zone = zoneBox(it);
+    const zoneColor = zoneBlocked.has(it.id) ? COLOR_ZONE_BLOCKED : COLOR_ZONE_OK;
+    placeOnFloor(ov.zoneFill, zone.min, zone.max, 0.15);
+    placeOnFloor(ov.zoneOutline, zone.min, zone.max, 0.2);
+    (ov.zoneFill.material as THREE.MeshBasicMaterial).color.copy(zoneColor);
+    (ov.zoneOutline.material as THREE.LineBasicMaterial).color.copy(zoneColor);
 
     // distance line: from the closest corner straight to the closest wall (the perpendicular)
     ov.distLine.geometry.setFromPoints([fit.corner, fit.foot]);
@@ -451,20 +530,23 @@ function updateChecks(): void {
     ov.label.style.left = `${((mid.x + 1) / 2) * r.width}px`;
     ov.label.style.top = `${((1 - mid.y) / 2) * r.height}px`;
     ov.label.textContent = cm < 0 ? `${-cm} cm outside!` : `${cm} cm`;
-    ov.label.style.borderColor = `#${color.getHexString(THREE.SRGBColorSpace)}`;
+    ov.label.style.borderColor = hex(clearanceColor(fit.clearance));
 
     const visible = showFit.checked;
     ov.outline.visible = ov.footprintFill.visible = ov.distLine.visible = visible;
     ov.label.style.display = visible && mid.z < 1 ? "block" : "none"; // mid.z ≥ 1: behind the camera
+    ov.zoneFill.visible = ov.zoneOutline.visible = showZones.checked;
 
     const others = fit.outside.filter((w) => w !== fit.wall);
     const status = cm < 0
       ? `❌ sticks out ${-cm} cm through the ${fit.wall}` + (others.length ? ` (also: ${others.join(", ")})` : "")
       : `✔ ${cm} cm to the ${fit.wall}`;
-    rows.push(`<b style="color:#${color.getHexString(THREE.SRGBColorSpace)}">■</b> ${it.type.name}: ${status}`);
+    fitRows.push(`<b style="color:${hex(clearanceColor(fit.clearance))}">■</b> ${it.type.name}: ${status}`);
   }
-  const html = rows.join("<br>");
-  if (html !== lastFitHtml) { fitList.innerHTML = html; lastFitHtml = html; } // touch the DOM only on change
+  const fitHtml = fitRows.join("<br>");
+  if (fitHtml !== lastFitHtml) { fitList.innerHTML = fitHtml; lastFitHtml = fitHtml; } // touch the DOM only on change
+  const conflictHtml = conflicts.length ? conflicts.join("<br>") : "✔ No overlaps, every safety zone is free.";
+  if (conflictHtml !== lastConflictHtml) { conflictList.innerHTML = conflictHtml; lastConflictHtml = conflictHtml; }
 }
 
 // ---------- Start ----------

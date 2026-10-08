@@ -96,3 +96,19 @@ export function clearanceColor(cm: number): THREE.Color {
   const H = cm < 0 ? 0 : Math.min(cm / COMFORT_CM, 1) * 120;
   return hsvToRgb(H, 0.85, 0.95);
 }
+
+/**
+ * Overlap of two axis-aligned boxes — "Collision of static primitives" (slide 21:
+ * "Check if two primitives are intersecting … answer is only yes/no").
+ * Two boxes intersect only if their ranges overlap on ALL THREE axes. On each axis the
+ * overlap length is  min(maxA, maxB) − max(minA, minB)  (negative = a gap between them).
+ * `depth` = the smaller of the X and Z overlaps = how far one piece must slide to separate.
+ */
+export function boxOverlap(
+  a: { min: THREE.Vector3; max: THREE.Vector3 }, b: { min: THREE.Vector3; max: THREE.Vector3 }
+): { intersects: boolean; depth: number } {
+  const ox = Math.min(a.max.x, b.max.x) - Math.max(a.min.x, b.min.x);
+  const oy = Math.min(a.max.y, b.max.y) - Math.max(a.min.y, b.min.y);
+  const oz = Math.min(a.max.z, b.max.z) - Math.max(a.min.z, b.min.z);
+  return { intersects: ox > 0 && oy > 0 && oz > 0, depth: Math.min(ox, oz) };
+}

@@ -272,3 +272,60 @@ The checks run every frame (a few pieces × 8 corners × 5 planes is very cheap)
 - The check uses each piece's **box**, not its exact shape, so it is cautious: a piece is reported as touching a wall when only the corner of its box does. For furniture planning, erring on the safe side is acceptable.
 - The planner shows the problem but does not move pieces automatically.
 - The floor is not checked (pieces always stand on it), and there are no doors, windows or radiators yet.
+
+---
+
+## Part 8 — Overlaps and safety zones
+
+### Approach
+Fitting inside the walls (Part 7) is not enough: pieces must not overlap each other, and each one needs **free space around it to be used safely**. This part adds both checks.
+
+**1. Overlap between pieces — "collision of static primitives" (Basic Geometry, slide 21).** The slide reduces collision detection to a simpler problem: *check if two primitives intersect; the answer is only yes/no.* For two axis-aligned boxes this is very simple (`boxOverlap` in `src/checks.ts`): they intersect only if their ranges overlap on **all three axes**, and on each axis the overlap is `min(maxA, maxB) − max(minA, minB)`. Every pair of pieces is tested. The smaller of the X and Z overlaps is reported as the *depth* — how far one piece has to slide to separate them.
+
+**2. Safety zones.** Every equipment type now has a `zone`: the free space it needs on its front, back and sides (`src/equipment.ts`).
+
+| Equipment | Front | Back | Each side | Source |
+|---|---|---|---|---|
+| Treadmill | 0 | **200 cm** | **50 cm** | ASTM F2115 treadmill standard (2 m behind the running surface, 0.5 m each side) |
+| Squat rack | 60 cm | 0 | 30 cm | assumption: step out with the bar, load plates |
+| Bench | 30 cm | 30 cm | 60 cm | assumption: sit / lie down from the side |
+| Exercise bike | 30 cm | 30 cm | 50 cm | assumption: get on and off |
+| Yoga mat | 30 cm | 30 cm | 30 cm | assumption: arms and legs reach past the mat |
+
+Only the treadmill numbers come from a standard; the others are the planner's assumptions, stated here openly and easy to change in one place.
+
+A zone is the piece's box grown by these amounts (`zoneBox` in `src/placement.ts`). It is defined in the piece's **own frame** (front = +X) and rotated with it, using the rotation about the vertical axis `x' = x·cosθ + z·sinθ, z' = −x·sinθ + z·cosθ` — the same rotation that turns the meshes. To make this useful, rotation was extended from 0°/90° (Part 6) to **all four quarter turns**: for a treadmill it matters which end is "behind".
+
+A zone is **blocked** if another piece's box is inside it (the same box-overlap test) or if it crosses a wall (the same signed point–plane test as Part 7, without the ceiling). Zones may overlap *each other* — two pieces can share the same walking space.
+
+**Colours** (all built in HSV with the same S and V, as in Part 7): red = overlapping or outside the room, orange = safety space blocked, green-to-yellow = the Part 7 clearance. Zones are drawn on the floor in light blue when free and orange when blocked. Each problem is listed in words in the panel, and the checkbox *Show safety zones* hides them.
+
+**Example layouts.** A *Load* button switches between two layouts for the default 400 × 350 cm room, so the comparison below is reproducible: the *Starter* layout (placed by eye) and a *Safe* layout (rearranged until every check passed).
+
+**Relation to the homework:** the homework handled a single object, so there was nothing to collide with. Here every pair of objects is tested, and the test is the yes/no static collision of slide 21.
+
+### Result
+![Starter layout, an overlap, and the safe layout](./assets/part8_zones.jpg)
+
+**1. Starter layout.** Every piece fits in the room (all Part 7 checks are green), but the panel lists:
+
+| Problem found |
+|---|
+| Treadmill needs free space; blocked by the left wall (180 cm short) and the back wall |
+| Squat rack needs free space; blocked by the right wall (40 cm short) and the back wall |
+| Yoga mat needs free space; blocked by Squat rack, Exercise bike |
+| Bench needs free space; blocked by Yoga mat |
+| Exercise bike needs free space; blocked by Yoga mat |
+
+*Hand check (treadmill): its box starts 20 cm from the left wall, and it needs 200 cm behind it → 200 − 20 = 180 cm short.*
+
+**2. Bench moved 200 cm to the left** (arrow keys): *"Bench and Exercise bike overlap by 50 cm."* Hand check: the bench spans z = 240…290 and the bike z = 237.5…292.5, so along Z they share the full 50 cm width of the bench (along X they share 90 cm; the smaller value is reported).
+
+**3. Safe layout.** *"No overlaps, every safety zone is free."* The treadmill now runs toward the right wall with its 2 m run-off covering the back half of the room; the rack and bench share the front half.
+
+**What the planner taught us:** in a 4 × 3.5 m room I could only fit three of the five pieces *with* their safety space — the treadmill and its zone alone cover 380 × 180 cm, about half of the floor. I did not find any place left for the bike or the mat (this is a result of trying, not a proof that no arrangement exists). That is exactly the kind of answer the project set out to give before anyone buys equipment.
+
+### Limitations
+- Zones are rectangles. Real free space is often rounder (for example, the arc of a kettlebell swing — Part 9 uses a sphere for that).
+- Except for the treadmill, the zone sizes are assumptions, not standards.
+- The overlap test is for boxes aligned with the room, which is why rotation is limited to quarter turns.
