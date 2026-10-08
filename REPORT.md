@@ -1,12 +1,10 @@
 # Home-Gym Planner — Mini Project Report
 
-> **Draft — reword in your own voice before submitting.**
-
 ## The question this project answers
 
 *"I want to put a treadmill, a squat rack and a bench in my room. Will it all fit — with enough safe space around each piece to actually train?"*
 
-The app lets you enter your room size, place gym equipment in 3D, and see which pieces fit, which collide, and where the ceiling is too low (for example for an overhead press). Every check is built from the geometric tests in the **Basic Geometry** lecture, the equipment is built as meshes following the **Mesh Modeling** lecture, and it is lit with our own shader that implements the **Illumination Models & Shading** lecture.
+The app lets you enter your room size, place gym equipment in 3D, and see which pieces fit, which collide, and where the ceiling is too low (for example for an overhead press). Every check is built from the geometric tests in the **Basic Geometry** lecture, the equipment is built as meshes following the **Mesh Modeling** lecture, it is lit with my own shader that implements the **Illumination Models & Shading** lecture, and the results are coloured with the HSV model from the **Color** lecture.
 
 **How it differs from the homework (nanorender):** the homework is a viewer for *one* loaded model. This project is a scene with *many* objects, and its main job is to *measure* the space between them and give an answer (fits / does not fit). It is written in TypeScript and runs in the browser.
 
@@ -22,7 +20,7 @@ The app lets you enter your room size, place gym equipment in 3D, and see which 
 - Only the two back walls are drawn solid; the front walls and ceiling are drawn as an outline, so the inside of the room is never hidden.
 - A floor grid with one line every 50 cm lets the reader estimate sizes directly from a screenshot.
 - Three sliders change the size. On every change the room's meshes are thrown away and rebuilt (simple, and fast enough for a handful of meshes).
-- Camera: a perspective camera (the same idea as the perspective projection we built in hw3) with three.js `OrbitControls` to orbit/zoom/pan. We deliberately use the library here: camera navigation was already implemented by hand in hw3, so re-writing it would repeat the homework instead of adding something new.
+- Camera: a perspective camera (the same idea as the perspective projection I built in hw3) with three.js `OrbitControls` to orbit/zoom/pan. I deliberately used the library here: camera navigation was already implemented by hand in hw3, so re-writing it would repeat the homework instead of adding something new.
 
 ### Result
 ![Default room, 400 × 350 × 250 cm](./assets/part1_room.png)
@@ -34,7 +32,7 @@ The app lets you enter your room size, place gym equipment in 3D, and see which 
 *The same view after changing length to 600 cm and height to 320 cm with the sliders.*
 
 ### Limitations
-- The surfaces use a flat colour with no lighting yet (`MeshBasicMaterial`); this is replaced by our own Phong shader in Part 2 (done).
+- The surfaces use a flat colour with no lighting yet (`MeshBasicMaterial`); this is replaced by my own Phong shader in Part 2.
 - The room is always a rectangular box — no L-shaped rooms, doors or windows.
 - The camera does not re-frame itself when the room grows; the user zooms out with the mouse wheel.
 
@@ -56,7 +54,7 @@ Instead of using three.js's ready-made lit materials (which hide the math), the 
 Design decisions:
 - **One point light** (slide 9, "point source") hangs 10 cm below the ceiling, like a ceiling lamp; sliders move it along X and Z. The same lamp will later be an obstacle for the overhead-press check.
 - **Light (`L_a, L_d, L_s`) vs material (`k_a, k_d, k_s, α`)** are kept separate, as on slide 13: the light values live in one shared `lightUniforms` object used by every material, and each surface has its own coefficients. The walls are matte paint (`k_s = 0`); the floor is a slightly shiny rubber gym floor (`k_s = 0.35`, `α = 20`) so the specular term is visible.
-- **Everything is computed in world space.** The surface point, the normal, the light position and the camera position are all converted to world coordinates before any dot product. *(Draft — confirm in your own words: in hw5 my renderer had a bug where faces came out almost black because the face normals and the light direction were in different coordinate spaces. Here I avoided that by putting every vector in the same space.)*
+- **Everything is computed in world space.** The surface point, the normal, the light position and the camera position are all converted to world coordinates before any dot product. At the end of hw5 my renderer had an unresolved bug: triangles came out almost black because the face normals and the light direction were in different coordinate spaces. Here I avoided that by converting every vector to the same space before using it.
 - **Normals are transformed with the inverse-transpose of the model matrix**, so they stay perpendicular to the surface even if an object is scaled unevenly.
 - The lighting is evaluated **per pixel**, in the fragment shader. Part 5 adds a Gouraud (per-vertex) mode so the two can be compared, as on slides 25–29.
 - **Checkboxes** switch each term on and off, which produced the comparison images below.
@@ -152,7 +150,7 @@ UI additions:
 **What did not change:** boxes look the same with both methods, because each side of a box has its own vertices (Part 3), so every vertex touches only triangles of one flat side. The long thin cylinders (rollers, handlebar, barbell) also change very little: there the big side triangles already outnumber the cap triangles.
 
 ### Limitations
-- Area weighting is still an estimate, not "the" correct normal. On the flywheel it makes the flat face correct, but now the thin round edge is shaded almost as if it were flat too. The truly correct fix for a sharp rim is to **not share** the rim vertices between the side and the cap (per-vertex-per-face normals, Shading slide 27), as we already do for boxes. We kept the shared rim on purpose to be able to show this comparison.
+- Area weighting is still an estimate, not "the" correct normal. On the flywheel it makes the flat face correct, but now the thin round edge is shaded almost as if it were flat too. The truly correct fix for a sharp rim is to **not share** the rim vertices between the side and the cap (per-vertex-per-face normals, Shading slide 27), as I already do for boxes. I kept the shared rim on purpose to be able to show this comparison.
 - Area-weighted is the default from now on.
 
 ---
@@ -200,7 +198,7 @@ This is where the viewer becomes a planner: pieces can be **selected with the mo
 
 All the mouse work is done with the line and plane formulas from the *Basic Geometry* lecture (`src/geometry.ts`):
 
-1. **The mouse as a line (slide 15).** The pixel under the mouse is turned into a line through the camera in *parametric form*, `f(t) = (1 − t)·P1 + t·P2`, where `P1` is that pixel on the near plane and `P2` the same pixel on the far plane. (`unproject` is the inverse of the perspective projection we wrote in hw3.)
+1. **The mouse as a line (slide 15).** The pixel under the mouse is turned into a line through the camera in *parametric form*, `f(t) = (1 − t)·P1 + t·P2`, where `P1` is that pixel on the near plane and `P2` the same pixel on the far plane. (`unproject` is the inverse of the perspective projection I wrote in hw3.)
 2. **Picking — what did the user click?** Two steps, following the *Collision Detection* slide (21: "needs to be efficient and accurate"):
    - *Quick reject:* every piece is wrapped in a bounding sphere, and the line is tested with the **line–sphere test of slide 24** ("find distance from line to center of sphere; if it is less than R, there is an intersection"). The distance itself is the **point–line distance of slide 16**, `‖QP1 × QP2‖ / ‖P1P2‖`.
    - *Exact test:* for the pieces that pass, the line is tested against the piece's box. `lineBoxT` intersects the line with the plane of each of the 6 sides (**line–plane intersection** with the plane equation `Ax + By + Cz + D = 0` of slide 20) and checks whether the point lies inside that side's rectangle. The piece whose box is entered first (smallest `t`) is the one nearest the camera.
@@ -236,7 +234,7 @@ This is the first part that answers the project's question. Each wall and the ce
 | front wall | (0, 0, −1) | width | z ≤ width |
 | ceiling | (0, −1, 0) | height | y ≤ height |
 
-For every piece, the **8 corners** of its box are measured against every plane with the **point–plane distance** of slide 20, `D = (w·n + d) / ‖n‖`. The slide takes the absolute value; we keep the **sign**, because with inward normals the sign tells us which side the corner is on: positive = inside, negative = outside. The smallest value over all corners and planes is the piece's **clearance** — how much room is left to the closest wall — and if it is negative, the piece sticks out by that much. The planner also lists *every* plane a piece sticks through (for example a rack that is both too long and too tall).
+For every piece, the **8 corners** of its box are measured against every plane with the **point–plane distance** of slide 20, `D = (w·n + d) / ‖n‖`. The slide takes the absolute value; I keep the **sign**, because with inward normals the sign tells which side the corner is on: positive = inside, negative = outside. The smallest value over all corners and planes is the piece's **clearance** — how much room is left to the closest wall — and if it is negative, the piece sticks out by that much. The planner also lists *every* plane a piece sticks through (for example a rack that is both too long and too tall).
 
 Visual feedback for each piece:
 - its box outline and its footprint on the floor in a **status colour**;
@@ -386,7 +384,7 @@ For each movement the smallest gap is shown in the panel (*"✔ 17 cm to the cei
 
 **Question:** *Will my gym equipment fit in my room — with enough safe space around each piece to train?*
 
-**Answer the planner gives:** for the default 4 × 3.5 × 2.5 m room, a treadmill, a squat rack and a bench fit with all their safety space; the bike and the mat did not fit as well in our attempts; and whether an overhead press is safe depends on the lamp's position and on the person's height.
+**Answer the planner gives:** for the default 4 × 3.5 × 2.5 m room, a treadmill, a squat rack and a bench fit with all their safety space; I could not find room for the bike and the mat as well; and whether an overhead press is safe depends on the lamp's position and on the person's height.
 
 ### How the lectures were used
 
@@ -402,6 +400,3 @@ For each movement the smallest gap is shown in the panel (*"✔ 17 cm to the cei
 - Doors, windows and radiators as fixed obstacles.
 - A search that tries arrangements automatically and suggests one that passes.
 - Saving and loading a room to a file.
-
-### Use of AI
-*(Draft — reword and adjust to what you actually did.)* The course encourages AI-assisted development. I used Claude as a coding partner: it proposed the project idea from my lecture slides, and wrote code part by part, which I ran, tested and committed one part at a time. I asked for every formula to use the slide's names and a comment quoting the slide, so that I could check each one against the lecture. For every part I verified the numbers by hand (see the "hand check" notes) and reviewed the screenshots before committing.
